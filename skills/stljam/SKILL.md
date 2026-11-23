@@ -7,6 +7,8 @@ description: Publish CAD previews, review geometry with the user, and iterate th
 
 Keep the project's own editable source. Publish a preview as one named file per part or instance. Preserve the assembly origin, units, component identifiers and placements between exports.
 
+For large assemblies, organize related parts with the manifest's optional `group` path, such as `["Drivetrain", "Gearbox"]`. Use stable names across revisions.
+
 Match the work to the feedback. Check the current review and reuse suitable exports and placements. A change to the view or preview may be enough. Edit the source when the user requests a design change.
 
 ## Run a design review

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Organize larger assemblies with nested part groups defined in the manifest. Expand a group to inspect its parts, or show and hide the whole group at once.
+- Clicking a part in the 3D viewer expands its parent groups and scrolls the Parts panel to its highlighted row.
+- Section starts on the X axis. The axis picker lists X, Y, and Z, and saved comment views restore their original section.
+
 ## 0.1.1
 
 - Add multiple numbered points and regions to a single comment, including marks on different parts.

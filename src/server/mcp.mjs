@@ -26,7 +26,7 @@ async function call(name, args, base, signal, local) {
   if (name === 'open_review' && !args.manifestPath) {
     const review = await request(base, `/api/projects/${id}`);
     const latest = review.versions.at(-1);
-    const parts = latest.model.parts.map(({ id, label }) => ({ id, label }));
+    const parts = latest.model.parts.map(({ id, label, group }) => ({ id, label, group }));
     return { id, version: latest.number, url: `${base}/review/${id}`, parts };
   }
   if (name === 'open_review' || name === 'add_version') {

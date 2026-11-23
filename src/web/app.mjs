@@ -3,6 +3,7 @@ import { dimensionLabel as mm } from './markup.mjs';
 import { commentCard, sentRound } from './feedback-list.mjs';
 import { addIcon } from './icons.mjs';
 import { maxCommentMarks, targetMarks } from '../core/review.mjs';
+import { renderPartList } from './parts.mjs';
 
 const $ = id => document.getElementById(id);
 const projectId = location.pathname.split('/')[2];
@@ -17,6 +18,7 @@ let commentBusy = false;
 let pendingSubmission;
 let activeRequest = 0;
 let statusTimeout;
+const expandedPartGroups = new Set();
 
 function status(text) {
   clearTimeout(statusTimeout);
@@ -175,7 +177,12 @@ function setMode(next) {
 }
 
 function onPick(hit) {
-  if (!hit || modelLoading || commentBusy || reviewClosed()) return;
+  if (!hit || modelLoading || commentBusy) return;
+  if (reviewClosed()) {
+    selected = hit.partId;
+    renderParts(true);
+    return;
+  }
   if (mode === 'measure') {
     if (!rulerStart) {
       measurement = undefined;
@@ -194,7 +201,7 @@ function onPick(hit) {
   if (marking) appendMark({ kind: 'point', partId: hit.partId, point: hit.point, normal: hit.normal, surface: hit.surface });
   else if (target.kind === 'part' || target.kind === 'assembly') setTarget({ kind: 'part', partId: hit.partId });
   setMode(undefined);
-  renderParts();
+  renderParts(true);
   if (marking) focusComposer();
 }
 
@@ -219,35 +226,31 @@ function resetForm() {
   updateComposer();
 }
 
-function renderParts() {
-  $('parts').replaceChildren();
+function renderParts(reveal = false) {
   const parts = currentVersion()?.model.parts ?? [];
-  for (const part of parts) {
-    const row = document.createElement('div');
-    row.className = 'part';
-    const open = button(part.label, () => {
-      selected = part.id;
-      if (target.kind === 'part' || target.kind === 'assembly') setTarget({ kind: 'part', partId: part.id });
-      renderParts();
-    }, selected === part.id);
-    open.title = part.label;
-    addIcon(open, 'cube');
-    const hiddenNow = viewer.hidden.has(part.id);
-    const hide = button('', () => {
-      const hidden = new Set(viewer.hidden);
-      if (hidden.has(part.id)) hidden.delete(part.id); else hidden.add(part.id);
-      setHidden(hidden);
-    });
-    const visibility = `${hiddenNow ? 'Show' : 'Hide'} ${part.label}`;
-    hide.className = `visibility${hiddenNow ? ' is-hidden' : ''}`;
-    hide.setAttribute('aria-label', visibility);
-    hide.title = visibility;
-    addIcon(hide, hiddenNow ? 'eyeOff' : 'eye');
-    row.append(open, hide);
-    $('parts').append(row);
-  }
   $('show-all').hidden = !viewer.hidden.size;
-  if (selected) $('parts').append(addIcon(button('Isolate selection', () => setHidden(parts.filter(part => part.id !== selected).map(part => part.id))), 'region'));
+  $('isolate-part').hidden = !selected;
+  renderPartList($('parts'), {
+    parts, selected, hidden: viewer.hidden, expanded: expandedPartGroups, reveal, button,
+    onSelect: id => {
+      selected = id;
+      if (!reviewClosed() && (target.kind === 'part' || target.kind === 'assembly')) setTarget({ kind: 'part', partId: id });
+      renderParts();
+    },
+    onVisibility: (ids, hide) => {
+      const hidden = new Set(viewer.hidden);
+      for (const id of ids) {
+        if (hide) hidden.add(id);
+        else hidden.delete(id);
+      }
+      setHidden(hidden);
+    },
+    onExpand: key => {
+      if (expandedPartGroups.has(key)) expandedPartGroups.delete(key);
+      else expandedPartGroups.add(key);
+      renderParts();
+    }
+  });
 }
 
 function setHidden(values) {
@@ -410,7 +413,7 @@ function showComment(comment) {
   measurement = comment.measurement;
   syncSectionControls();
   displayMeasurement();
-  renderParts();
+  renderParts(true);
 }
 
 async function openVersion(number) {
@@ -533,7 +536,7 @@ async function boot() {
       selected = region.parts.length === 1 ? region.parts[0].partId : undefined;
       appendMark(region);
       setMode(undefined);
-      renderParts();
+      renderParts(Boolean(selected));
       focusComposer();
     },
     onCamera: view => { comparison?.restore(view, true); updateMarker(); }
@@ -562,6 +565,9 @@ async function boot() {
   window.addEventListener('keydown', event => { if (event.key === 'Escape' && mode) setMode(undefined); });
   $('measure').addEventListener('click', () => setMode(mode === 'measure' ? undefined : 'measure'));
   $('clear-target').addEventListener('click', clearTarget);
+  $('isolate-part').addEventListener('click', () => {
+    setHidden(currentVersion().model.parts.filter(part => part.id !== selected).map(part => part.id));
+  });
   $('undo-mark').addEventListener('click', () => {
     if (target.kind !== 'group') return;
     const marks = target.marks.slice(0, -1);

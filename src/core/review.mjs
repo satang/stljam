@@ -45,7 +45,12 @@ export function manifest(input) {
     const determinant = a * (e * i - f * h) - d * (b * i - c * h) + g * (b * f - c * e);
     requireValue(transform[3] === 0 && transform[7] === 0 && transform[11] === 0 && transform[15] === 1 && Number.isFinite(determinant) && Math.abs(determinant) > 1e-12, 'The transform must be affine and invertible');
     requireValue(/^[a-f0-9]{64}$/.test(part.asset ?? ''), 'Missing part asset');
-    return { id, label: textField(part.label ?? id, 'Name', 130), format: part.format, units, upAxis, transform, asset: part.asset, source: part.source ? textField(part.source, 'Source reference', 1000) : undefined };
+    let group;
+    if (part.group !== undefined) {
+      requireValue(Array.isArray(part.group) && part.group.length <= 8, 'Group must be a path of up to 8 names');
+      if (part.group.length) group = part.group.map(name => textField(name, 'Group name', 100));
+    }
+    return { id, label: textField(part.label ?? id, 'Name', 130), format: part.format, units, upAxis, transform, asset: part.asset, source: part.source ? textField(part.source, 'Source reference', 1000) : undefined, group };
   });
   return { parts };
 }

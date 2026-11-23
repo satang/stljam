@@ -53,7 +53,7 @@ async function newScene(base, workspace) {
   await writeFile(join(workspace, 'part.stl'), triangle(20));
   await writeFile(join(workspace, 'model.json'), JSON.stringify({ parts: [
     { id: 'gearbox', file: 'part.stl', units: 'mm', source: 'example.FCStd#Body' },
-    { id: 'duplicate', file: 'part.stl', transform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 0, 0, 1] }
+    { id: 'duplicate', file: 'part.stl', group: ['Assembly', 'Drivetrain'], transform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 0, 0, 1] }
   ] }));
   const params = { projectId: 'gearbox', title: 'Test gearbox', workspace, manifestPath: 'model.json' };
   const opened = await publish(base, { ...params, requestId: 'first', baseVersion: 0 });
@@ -240,7 +240,7 @@ test('negotiates MCP and delivers a review while listening', async t => {
   const payload = response => JSON.parse(response.result.content[0].text);
   const opened = payload(await rpc('tools/call', { name: 'open_review', arguments: { projectId: 'gearbox' } }));
   assert.equal(opened.version, 1);
-  assert.deepEqual(opened.parts, [{ id: 'gearbox', label: 'gearbox' }, { id: 'duplicate', label: 'duplicate' }]);
+  assert.deepEqual(opened.parts, [{ id: 'gearbox', label: 'gearbox' }, { id: 'duplicate', label: 'duplicate', group: ['Assembly', 'Drivetrain'] }]);
   const wait = rpc('tools/call', { name: 'wait_for_feedback', arguments: { projectId: 'gearbox', seconds: 4 } });
   await waitUntilListening(base);
   const saved = await request(base, '/api/projects/gearbox/comments', { ...draft, detailCapture: pixel });
@@ -340,6 +340,8 @@ test('validates units, transforms, and annotation targets', () => {
   assert.throws(() => manifest({ parts: [part, part] }), /Duplicate part ID/);
   assert.throws(() => manifest({ parts: [{ ...part, transform: Array(16).fill(0) }] }), /invertible/);
   assert.throws(() => manifest({ parts: [{ ...part, units: 'pixels' }] }), /Invalid unit/);
+  assert.throws(() => manifest({ parts: [{ ...part, group: 'Assembly' }] }), /Group must be a path/);
+  assert.throws(() => manifest({ parts: [{ ...part, group: ['Assembly', ' '] }] }), /Invalid Group name/);
   const model = manifest({ parts: [part] });
   assert.throws(() => annotation({ text: 'x', target: { kind: 'point', partId: 'other' } }, model), /Unknown part/);
   assert.throws(() => annotation({ text: 'x', target: { kind: 'point', partId: 'body', point: [0, 1, Infinity] } }, model), /Invalid Point/);

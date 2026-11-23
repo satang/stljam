@@ -27,7 +27,7 @@ npm start
 
 Open [StlJam](http://127.0.0.1:32410) and choose **Load models**. The viewer loads on your machine and the checkout has no npm runtime dependencies.
 
-To use the CLI outside the checkout, install the `.tgz` from [GitHub Releases](https://github.com/satang/stljam-oss/releases) with `npm install --global ./stljam-0.1.1.tgz`, then run `stljam serve`. Use `stljam demo` and `stljam demo --next` in place of the checkout commands below.
+To use the CLI outside the checkout, install the `.tgz` from [GitHub Releases](https://github.com/satang/stljam-oss/releases) with `npm install --global ./stljam-0.1.2.tgz`, then run `stljam serve`. Use `stljam demo` and `stljam demo --next` in place of the checkout commands below.
 
 To try the review flow with the included synthetic gearbox, run this in a second terminal:
 
@@ -72,8 +72,8 @@ Use one preview file per selectable part or instance. A manifest preserves names
 ```json
 {
   "parts": [
-    { "id": "housing", "label": "Housing", "file": "housing.stl", "units": "mm", "upAxis": "Z", "source": "gearbox.FCStd#Body" },
-    { "id": "lid", "label": "Lid", "file": "lid.stl", "units": "mm", "upAxis": "Z", "source": "gearbox.FCStd#Body001" }
+    { "id": "housing", "label": "Housing", "file": "housing.stl", "units": "mm", "upAxis": "Z", "source": "gearbox.FCStd#Body", "group": ["Gearbox", "Enclosure"] },
+    { "id": "lid", "label": "Lid", "file": "lid.stl", "units": "mm", "upAxis": "Z", "source": "gearbox.FCStd#Body001", "group": ["Gearbox", "Enclosure"] }
   ]
 }
 ```
@@ -85,6 +85,8 @@ node src/server/cli.mjs publish gearbox manifest.json --workspace "/absolute/pat
 ```
 
 The manifest path is relative to the workspace. Each `file` is relative to the manifest. The optional `transform` is a column-major 4×4 matrix in millimeters, applied after converting the units and up axis. Keep part IDs stable across exports. STL defaults to millimeters and Z up. GLB defaults to meters and Y up. 3MF uses the embedded units unless the manifest overrides them.
+
+For larger assemblies, set `group` to a path of names from parent to child. The Parts panel can expand each group and show or hide all its members together. Parts without a group appear at the top level.
 
 ### Exporters
 

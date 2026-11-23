@@ -26,8 +26,11 @@
   <main id="review" hidden>
     <aside class="parts">
       <h2>Parts</h2>
-      <div id="parts"></div>
-      <button id="show-all" class="quiet-button" data-icon="eye" hidden>Show all</button>
+      <div id="parts" aria-label="Assembly parts"></div>
+      <div class="part-actions">
+        <button id="show-all" class="quiet-button" data-icon="eye" hidden>Show all</button>
+        <button id="isolate-part" class="quiet-button" data-icon="region" hidden>Isolate selection</button>
+      </div>
     </aside>
     <section class="workspace" aria-label="3D viewer">
       <div class="toolbar tools" aria-label="Viewer tools">
@@ -48,7 +51,7 @@
         </div>
       </div>
       <div id="section-controls" class="toolbar" hidden>
-        <select id="axis" aria-label="Section axis"><option>Z</option><option>X</option><option>Y</option></select>
+        <select id="axis" aria-label="Section axis"><option>X</option><option>Y</option><option>Z</option></select>
         <input id="offset" type="range" aria-label="Section offset">
         <output id="offset-label"></output>
         <label><input id="flip" type="checkbox"> Flip</label>
