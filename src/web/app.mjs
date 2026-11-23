@@ -2,6 +2,7 @@ import { Viewport } from './viewport.mjs';
 import { dimensionLabel as mm } from './markup.mjs';
 import { commentCard, sentRound } from './feedback-list.mjs';
 import { addIcon } from './icons.mjs';
+import { maxCommentMarks, targetMarks } from '../core/review.mjs';
 
 const $ = id => document.getElementById(id);
 const projectId = location.pathname.split('/')[2];
@@ -54,8 +55,10 @@ function option(number, suffix = '') {
   return new Option(`v${number}${suffix}`, String(number));
 }
 
+function hasPendingMarks() { return !selectedComment && ['point', 'region', 'group'].includes(target.kind); }
+
 function editingDraft() {
-  return !reviewClosed() && Boolean($('comment').value.trim() || inlineEdit);
+  return !reviewClosed() && Boolean($('comment').value.trim() || inlineEdit || hasPendingMarks());
 }
 
 function amendment() { return review?.amendments?.find(item => item.version === active)?.batch ?? null; }
@@ -87,12 +90,17 @@ function updateComposer() {
   $('add-comment').disabled = commentBusy || !typing;
   $('submit').hidden = closed;
   $('submit').textContent = correcting && !count ? 'Withdraw previous submission' : 'Submit review';
-  $('submit').disabled = closed || commentBusy || typing || Boolean(inlineEdit) || (!count && !correcting);
-  $('send-hint').hidden = closed || !typing;
+  const pending = hasPendingMarks();
+  $('submit').disabled = closed || commentBusy || typing || pending || Boolean(inlineEdit) || (!count && !correcting);
+  $('send-hint').hidden = closed || (!typing && !pending);
+  $('send-hint').textContent = typing ? 'Add the comment you are writing before submitting.' : 'Add a comment for the marks or clear them before submitting.';
 }
 
 function composeComment() {
-  return { version: active, revision: amendment(), text: $('comment').value, target, view: viewer.view(), measurement, capture: viewer.capture(target) };
+  const view = viewer.view();
+  const capture = viewer.capture();
+  const detailCapture = viewer.captureDetail(target, measurement);
+  return { version: active, revision: amendment(), text: $('comment').value, target, view, measurement, capture, detailCapture };
 }
 
 async function writeComment(action) {
@@ -112,6 +120,10 @@ function currentVersion() {
 
 function targetLabel(mark) {
   const partName = id => currentVersion()?.model.parts.find(part => part.id === id)?.label ?? id;
+  if (mark.kind === 'group') {
+    const ids = new Set(mark.marks.flatMap(item => item.parts ? item.parts.map(part => part.partId) : [item.partId]));
+    return `${mark.marks.length} marks · ${[...ids].map(partName).join(', ')}`;
+  }
   if (mark.kind === 'region') return `Region · ${mark.parts.map(({ partId }) => partName(partId)).join(', ')}`;
   if (!mark.partId) return 'Entire assembly';
   if (mark.kind === 'point') return `${mark.surface === 'section' ? 'Point on section' : 'Point'} · ${partName(mark.partId)}`;
@@ -120,14 +132,8 @@ function targetLabel(mark) {
 
 function updateMarker() {
   viewer?.setAnnotations(target, measurement, rulerStart);
-  const marker = $('marker');
-  const position = viewer?.projectPin(target);
-  marker.hidden = !position;
-  if (position) {
-    marker.style.left = `${position[0] * 100}%`;
-    marker.style.top = `${position[1] * 100}%`;
-  }
   $('clear-target').hidden = target.kind === 'assembly' && !measurement && !rulerStart;
+  $('undo-mark').hidden = target.kind !== 'group';
 }
 
 function setTarget(next) {
@@ -137,6 +143,17 @@ function setTarget(next) {
   $('target').title = label;
   $('target').toggleAttribute('data-marked', target.kind !== 'assembly');
   updateMarker();
+  updateComposer();
+}
+
+function appendMark(mark) {
+  const marks = selectedComment ? [] : targetMarks(target).filter(item => item.kind === 'point' || item.kind === 'region');
+  if (marks.length === maxCommentMarks) {
+    status(`Add the comment before marking more than ${maxCommentMarks} locations.`);
+    return;
+  }
+  selectedComment = undefined;
+  setTarget(marks.length ? { kind: 'group', marks: [...marks, mark] } : mark);
 }
 
 function focusComposer() {
@@ -174,9 +191,8 @@ function onPick(hit) {
   }
   const marking = mode === 'point';
   selected = hit.partId;
-  setTarget(marking
-    ? { kind: 'point', partId: hit.partId, point: hit.point, normal: hit.normal, surface: hit.surface }
-    : { kind: 'part', partId: hit.partId });
+  if (marking) appendMark({ kind: 'point', partId: hit.partId, point: hit.point, normal: hit.normal, surface: hit.surface });
+  else if (target.kind === 'part' || target.kind === 'assembly') setTarget({ kind: 'part', partId: hit.partId });
   setMode(undefined);
   renderParts();
   if (marking) focusComposer();
@@ -211,7 +227,7 @@ function renderParts() {
     row.className = 'part';
     const open = button(part.label, () => {
       selected = part.id;
-      setTarget({ kind: 'part', partId: part.id });
+      if (target.kind === 'part' || target.kind === 'assembly') setTarget({ kind: 'part', partId: part.id });
       renderParts();
     }, selected === part.id);
     open.title = part.label;
@@ -306,7 +322,7 @@ function renderFeedback() {
     label: targetLabel(comment.target), outcome: outcomes.get(comment.id), selected: selectedComment === comment.id,
     editor: inlineEdit?.id === comment.id ? inlineEdit : undefined, button,
     onSelect: () => {
-      if ($('comment').value.trim() || commentBusy) throw new Error('Add the current comment before opening a different annotation.');
+      if (editingDraft() || commentBusy) throw new Error('Add or clear the current comment before opening a different annotation.');
       selectedComment = comment.id;
       showComment(comment);
       for (const card of $('comments').querySelectorAll('.comment-card')) {
@@ -515,7 +531,7 @@ async function boot() {
         return;
       }
       selected = region.parts.length === 1 ? region.parts[0].partId : undefined;
-      setTarget(region);
+      appendMark(region);
       setMode(undefined);
       renderParts();
       focusComposer();
@@ -546,6 +562,11 @@ async function boot() {
   window.addEventListener('keydown', event => { if (event.key === 'Escape' && mode) setMode(undefined); });
   $('measure').addEventListener('click', () => setMode(mode === 'measure' ? undefined : 'measure'));
   $('clear-target').addEventListener('click', clearTarget);
+  $('undo-mark').addEventListener('click', () => {
+    if (target.kind !== 'group') return;
+    const marks = target.marks.slice(0, -1);
+    setTarget(marks.length === 1 ? marks[0] : { kind: 'group', marks });
+  });
   $('comment').addEventListener('input', updateComposer);
   $('reopen-review').addEventListener('click', safe(() => reopenRound(lastBatch())));
   $('discard-amendment').addEventListener('click', safe(async () => {

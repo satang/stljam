@@ -8,10 +8,14 @@ Start StlJam and load the example gearbox using the [quick start](../README.md#q
 
 1. Open the demo link and select **Housing** in the parts list. Choose **Isolate selection** to hide the other parts.
 2. Turn on **Section** and move the plane to expose a wall. Choose **Measure** and click the two surfaces you want to measure between. The viewer shows the endpoints and the straight-line distance on the mesh.
-3. Choose **Region** and drag over the wall you want to discuss. A region can include multiple visible parts. Isolate a part first to focus your feedback on it. For a single location, use **Point**.
+3. Choose **Region** and drag over the wall you want to discuss. The outline keeps its orientation in the model as you orbit. A region can include multiple visible parts. Isolate a part first to focus your feedback on it. For a single location, use **Point**.
 4. Write a comment in the lower-right composer. For example, “Thicken this wall outward and keep the inside face in place.” Choose **Add comment** or press Enter to add it to the list. You can add more comments and edit or remove them before sending.
 5. When the list is ready, choose **Submit review** at the top of the comments panel. That sends all the comments together and closes the version for feedback.
 6. Run the quick start's `demo --next` command. Open **Compare** to see v1 and v2 with synchronized cameras, section plane, and part visibility. Open the original comment on v1 to restore its view and mark. The saved screenshot shows what you saw when you wrote the comment.
+
+StlJam sends the original view and, for marked or measured geometry, a close-up with feature edges and separate part colors. With an active section, the close-up looks straight at the saved plane. A close-up can help locate mating surfaces. Use the editable CAD model to verify clearances.
+
+For feedback about several locations, use **Point** or **Region** again before adding your comment. StlJam numbers the marks in the order you add them and keeps them together. Use **Undo last** to remove the most recent mark or **Clear** to start again.
 
 ## Review your own design
 

@@ -126,7 +126,7 @@ test('keeps drafts on their original version and can submit them later', async t
   assert.deepEqual(historical[0].comments[0].target.point, [10, 0, 0]);
 });
 
-test('preserves a multi-part region and retrieves its sources', async t => {
+test('preserves a multi-part region and a group of marks with their sources', async t => {
   const { root, base } = await fixture(t);
   await newScene(base, root);
   const path = '/api/projects/gearbox';
@@ -136,10 +136,21 @@ test('preserves a multi-part region and retrieves its sources', async t => {
   };
   const saved = await request(base, `${path}/comments`, { ...draft, target: region });
   assert.deepEqual(saved.target, region);
+  const group = { kind: 'group', marks: [draft.target, region, { kind: 'point', partId: 'duplicate', point: [3, 4, 5] }] };
+  await assert.rejects(request(base, `${path}/comments`, { ...draft, target: { ...group, marks: [draft.target, group] } }), /Only points and regions/);
+  const grouped = await request(base, `${path}/comments`, { ...draft, text: 'Check the mating parts', target: group });
+  assert.deepEqual(grouped.target, group);
   const { id } = await request(base, `${path}/submit`, { version: 1 });
   const [feedback] = await request(base, `${path}/feedback?batch=${id}`);
-  assert.deepEqual(feedback.comments[0].target, region);
-  assert.equal(feedback.comments[0].sources[0].source, 'example.FCStd#Body');
+  const single = feedback.comments.find(comment => comment.id === saved.id);
+  assert.deepEqual(single.target, region);
+  assert.equal(single.sources[0].source, 'example.FCStd#Body');
+  const recovered = feedback.comments.find(comment => comment.id === grouped.id);
+  assert.deepEqual(recovered.target, group);
+  assert.deepEqual(recovered.sources, [{ partId: 'gearbox', source: 'example.FCStd#Body' }, { partId: 'duplicate' }]);
+  assert.match(feedback.markdown, /1\. gearbox.*Local point/);
+  assert.match(feedback.markdown, /2\. Region/);
+  assert.match(feedback.markdown, /3\. duplicate.*Local point/);
   assert.match(feedback.markdown, /gearbox: 2 samples between \[1, 2, 3\] mm and \[4, 5, 6\] mm/);
   assert.match(feedback.markdown, /from A \[0, 0, 0\] mm to B \[20, 0, 0\] mm/);
 });
@@ -227,12 +238,24 @@ test('negotiates MCP and delivers a review while listening', async t => {
   assert.equal(initialized.result.protocolVersion, '2025-06-18');
   assert.equal((await rpc('tools/list')).result.tools.length, 5);
   const payload = response => JSON.parse(response.result.content[0].text);
-  assert.equal(payload(await rpc('tools/call', { name: 'open_review', arguments: { projectId: 'gearbox' } })).version, 1);
+  const opened = payload(await rpc('tools/call', { name: 'open_review', arguments: { projectId: 'gearbox' } }));
+  assert.equal(opened.version, 1);
+  assert.deepEqual(opened.parts, [{ id: 'gearbox', label: 'gearbox' }, { id: 'duplicate', label: 'duplicate' }]);
   const wait = rpc('tools/call', { name: 'wait_for_feedback', arguments: { projectId: 'gearbox', seconds: 4 } });
   await waitUntilListening(base);
-  await request(base, '/api/projects/gearbox/comments', draft);
+  const saved = await request(base, '/api/projects/gearbox/comments', { ...draft, detailCapture: pixel });
   const batch = await request(base, '/api/projects/gearbox/submit', { version: 1 });
-  assert.equal(payload(await wait).cursor, batch.id);
+  const delivered = await wait;
+  assert.equal(payload(delivered).cursor, batch.id);
+  assert.equal(payload(delivered).batches[0].comments[0].detailCapture, saved.detailCapture);
+  assert.deepEqual(delivered.result.content.slice(1), [
+    { type: 'text', text: `Original view for comment ${saved.id}` },
+    { type: 'image', mimeType: 'image/png', data: pixel.slice(22) },
+    { type: 'text', text: `Detail view for comment ${saved.id}` },
+    { type: 'image', mimeType: 'image/png', data: pixel.slice(22) }
+  ]);
+  const recovered = await rpc('tools/call', { name: 'get_feedback', arguments: { projectId: 'gearbox', batchId: batch.id } });
+  assert.deepEqual(recovered.result.content.slice(1), delivered.result.content.slice(1));
   assert.equal((await request(base, '/api/projects/gearbox')).agentListening, false);
   const next = await rpc('tools/call', { name: 'wait_for_feedback', arguments: { projectId: 'gearbox', seconds: 1, cursor: batch.id } });
   assert.equal(payload(next).status, 'waiting');

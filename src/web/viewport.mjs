@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { disposePart, loadPart } from './model.mjs';
-import { dimensionLabel, drawMarkup } from './markup.mjs';
+import { dimensionLabel, drawMark, drawMarkup } from './markup.mjs';
 import { sectionTriangles } from './section.mjs';
+import { captureDetail } from './detail.mjs';
+import { targetMarks } from '../core/review.mjs';
 
 const axes = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
 const directions = { iso: [1, -1.3, .9], front: [0, -1, 0], right: [1, 0, 0], top: [0, -.0001, 1] };
@@ -189,8 +191,12 @@ export class Viewport {
       }
     });
     cancelAnimationFrame(this.capFrame);
+    this.capFrame = undefined;
     this.clearCaps();
-    if (section) this.capFrame = requestAnimationFrame(() => this.buildCaps(section));
+    if (section) this.capFrame = requestAnimationFrame(() => {
+      this.capFrame = undefined;
+      this.buildCaps(section);
+    });
     this.render();
   }
 
@@ -334,28 +340,30 @@ export class Viewport {
     ctx.clearRect(0, 0, width, height);
     const toPixel = ([x, y]) => [x * width, y * height];
     const project = world => toPixel(this.projectWorld(world));
-    const target = this.annotationTarget;
-    let region;
-    if (target?.kind === 'region') {
-      const samples = target.parts.flatMap(({ partId, points }) => points.flatMap(point => {
-        const projected = this.projectPin({ kind: 'point', partId, point });
-        return projected ? [toPixel(projected)] : [];
-      }));
-      if (samples.length) {
-        const low = [0, 1].map(i => Math.min(...samples.map(point => point[i])) - 6);
-        const high = [0, 1].map(i => Math.max(...samples.map(point => point[i])) + 6);
-        region = corners(low, high);
-      }
-    }
+    const marks = targetMarks(this.annotationTarget);
+    marks.forEach((mark, index) => {
+      const pin = this.projectPin(mark);
+      const region = mark.kind === 'region' && mark.parts.some(({ partId }) => this.parts.get(partId)?.visible)
+        ? mark.outline.map(point => project(new THREE.Vector3(...point)))
+        : undefined;
+      const regionBack = region && (region[1][0] - region[0][0]) * (region[3][1] - region[0][1])
+        < (region[1][1] - region[0][1]) * (region[3][0] - region[0][0]);
+      drawMark(ctx, { point: pin && toPixel(pin), region, regionBack, label: marks.length > 1 ? index + 1 : undefined });
+    });
     const { a, b } = this.ruler ?? {};
     const ruler = a && {
       a: project(new THREE.Vector3(...a)), b: b && project(new THREE.Vector3(...b)),
       text: b && dimensionLabel(Math.hypot(...a.map((value, i) => value - b[i])))
     };
-    drawMarkup(ctx, { ruler, region, drag: this.drag && corners(this.drag.start, this.drag.end).map(toPixel) });
+    drawMarkup(ctx, { ruler, drag: this.drag && corners(this.drag.start, this.drag.end).map(toPixel) });
   }
 
-  capture(target) {
+  capture() {
+    if (this.capFrame !== undefined) {
+      cancelAnimationFrame(this.capFrame);
+      this.capFrame = undefined;
+      this.buildCaps(this.section);
+    }
     this.render();
     const source = this.renderer.domElement;
     const canvas = document.createElement('canvas');
@@ -365,19 +373,14 @@ export class Viewport {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
     ctx.drawImage(this.overlay, 0, 0, canvas.width, canvas.height);
-    const pin = this.projectPin(target);
-    if (pin) {
-      const x = pin[0] * canvas.width;
-      const y = pin[1] * canvas.height;
-      ctx.beginPath();
-      ctx.arc(x, y, 10, 0, Math.PI * 2);
-      ctx.fillStyle = '#9ce0cd';
-      ctx.fill();
-      ctx.strokeStyle = '#111a21';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
     return canvas.toDataURL('image/png');
+  }
+
+  captureDetail(target, measurement) {
+    const { renderer, camera, frame, parts, caps, plane } = this;
+    try { return captureDetail({ renderer, camera, frame, parts, caps, plane, target, measurement }); }
+    catch (error) { console.warn('Could not capture the detail view:', error); }
+    finally { this.render(); }
   }
 
   projectWorld(world) {

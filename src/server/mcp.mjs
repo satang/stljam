@@ -6,10 +6,10 @@ const string = { type: 'string' };
 const schema = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
 export const tools = [
   { name: 'list_reviews', description: 'List local 3D review projects.', inputSchema: schema({}) },
-  { name: 'open_review', description: 'Open an existing project, or publish v1 from a manifest in the registered workspace.', inputSchema: schema({ projectId: string, title: string, manifestPath: string, requestId: string }, ['projectId']) },
-  { name: 'get_feedback', description: 'Read submitted feedback. Batch IDs are safe to read again. Coordinates are in millimeters.', inputSchema: schema({ projectId: string, afterBatchId: string, batchId: string }, ['projectId']) },
-  { name: 'wait_for_feedback', description: 'Wait briefly for a submitted review. Continue with the returned cursor while status is waiting.', inputSchema: schema({ projectId: string, cursor: string, seconds: { type: 'integer', minimum: 1, maximum: 20 } }, ['projectId']) },
-  { name: 'add_version', description: 'Publish a revision and record the disposition of submitted comments.', inputSchema: schema({ projectId: string, baseVersion: { type: 'integer' }, manifestPath: string, requestId: string, note: string, outcomes: { type: 'array', items: schema({ commentId: string, status: { enum: ['applied', 'pending', 'needs-clarification'] }, note: string }, ['commentId', 'status']) } }, ['projectId', 'baseVersion', 'manifestPath', 'requestId']) }
+  { name: 'open_review', description: 'Get the latest review URL, version, and part list, or publish v1 from a manifest in the registered workspace.', inputSchema: schema({ projectId: string, title: string, manifestPath: string, requestId: string }, ['projectId']) },
+  { name: 'get_feedback', description: 'Read submitted feedback with original and detail images when available. Grouped marks are numbered in order within the comment. Batch IDs are safe to read again. Coordinates are in millimeters.', inputSchema: schema({ projectId: string, afterBatchId: string, batchId: string }, ['projectId']) },
+  { name: 'wait_for_feedback', description: 'Wait for a submitted review. If status is waiting, call again immediately with the returned cursor. Repeat in the same turn for up to about 10 minutes per review round.', inputSchema: schema({ projectId: string, cursor: string, seconds: { type: 'integer', minimum: 1, maximum: 20 } }, ['projectId']) },
+  { name: 'add_version', description: 'Publish a revised preview and record the outcome of submitted comments. In an ongoing review, share the updated link and restart wait_for_feedback in the same turn using the last feedback cursor.', inputSchema: schema({ projectId: string, baseVersion: { type: 'integer' }, manifestPath: string, requestId: string, note: string, outcomes: { type: 'array', items: schema({ commentId: string, status: { enum: ['applied', 'pending', 'needs-clarification'] }, note: string }, ['commentId', 'status']) } }, ['projectId', 'baseVersion', 'manifestPath', 'requestId']) }
 ];
 
 async function feedback(base, project, after, batch) {
@@ -25,7 +25,9 @@ async function call(name, args, base, signal, local) {
   const workspace = process.env.STLJAM_WORKSPACE;
   if (name === 'open_review' && !args.manifestPath) {
     const review = await request(base, `/api/projects/${id}`);
-    return { id, version: review.versions.at(-1).number, url: `${base}/review/${id}` };
+    const latest = review.versions.at(-1);
+    const parts = latest.model.parts.map(({ id, label }) => ({ id, label }));
+    return { id, version: latest.number, url: `${base}/review/${id}`, parts };
   }
   if (name === 'open_review' || name === 'add_version') {
     if (!workspace) throw new Error('Set STLJAM_WORKSPACE to publish through HTTP or use the CLI.');
@@ -44,6 +46,32 @@ async function call(name, args, base, signal, local) {
 
 const supportedVersions = new Set(['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']);
 
+async function feedbackImages(batches, base, signal) {
+  const content = [];
+  let remainingBytes = 8_000_000;
+  for (const { comments } of batches) for (const comment of comments) {
+    for (const [label, hash] of [['Original view', comment.capture], ['Detail view', comment.detailCapture]]) {
+      if (!/^[a-f0-9]{64}$/.test(hash ?? '')) continue;
+      try {
+        const response = await fetch(`${base}/assets/${hash}`, { signal });
+        const size = Number(response.headers.get('content-length'));
+        if (!response.ok || response.headers.get('content-type') !== 'image/png' || !size || size > remainingBytes) {
+          await response.body?.cancel();
+          continue;
+        }
+        const bytes = Buffer.from(await response.arrayBuffer());
+        remainingBytes -= bytes.length;
+        content.push({ type: 'text', text: `${label} for comment ${comment.id}` },
+          { type: 'image', mimeType: 'image/png', data: bytes.toString('base64') });
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        // Keep the feedback and asset links available if an image cannot be loaded.
+      }
+    }
+  }
+  return content;
+}
+
 export async function handleRpc(message, base, signal, local) {
   const id = message?.id;
   const error = (code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
@@ -53,7 +81,11 @@ export async function handleRpc(message, base, signal, local) {
   if (message.method === 'initialize') return result({
     protocolVersion: supportedVersions.has(message.params?.protocolVersion) ? message.params.protocolVersion : '2025-11-25',
     capabilities: { tools: {} }, serverInfo: { name: 'stljam', version: pkg.version },
-    instructions: 'Share the review URL and call wait_for_feedback before ending your turn. While waiting, call it again with the returned cursor for up to 10 minutes in total. Apply the requested changes in the editable CAD source, verify and publish a new revision with add_version, then wait again using the last cursor. If the turn has ended, use get_feedback to resume. A batch with replaces supersedes that earlier batch.'
+    instructions: [
+      'Check the current review and reuse suitable exports. Match the work and verification to the request. Edit the CAD source when the user asks for a design change. Use add_version when the published preview changes and share the same review link.',
+      'In an ongoing review, share the review URL as a progress update after publishing the first version and every revised version. Immediately call wait_for_feedback in the same turn, using the last feedback cursor when available.',
+      'If wait_for_feedback returns waiting, call it again immediately with the returned cursor. Allow up to about 10 minutes of waiting for each new version, or stop sooner if the user ends the review. At the time limit, tell the user how to resume. Use get_feedback when they return. A batch with replaces supersedes the earlier batch.'
+    ].join(' ')
   });
   if (message.method === 'ping') return result({});
   if (message.method === 'tools/list') return result({ tools });
@@ -62,7 +94,9 @@ export async function handleRpc(message, base, signal, local) {
   if (!tools.some(tool => tool.name === name)) return error(-32602, 'Unknown tool');
   try {
     const output = await call(name, message.params?.arguments ?? {}, base, signal, local);
-    return result({ content: [{ type: 'text', text: JSON.stringify(output, null, 2) }] });
+    const batches = name === 'get_feedback' ? output : name === 'wait_for_feedback' ? output.batches : undefined;
+    const images = batches ? await feedbackImages(batches, base, signal) : [];
+    return result({ content: [{ type: 'text', text: JSON.stringify(output, null, 2) }, ...images] });
   } catch (failure) {
     return result({ isError: true, content: [{ type: 'text', text: failure.message }] });
   }

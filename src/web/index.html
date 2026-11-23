@@ -54,7 +54,7 @@
         <label><input id="flip" type="checkbox"> Flip</label>
       </div>
       <div id="viewports">
-        <div class="viewport" id="viewport"><span class="view-label" id="active-view-label"></span><i id="marker" hidden></i></div>
+        <div class="viewport" id="viewport"><span class="view-label" id="active-view-label"></span></div>
         <div class="viewport" id="comparison" hidden><select class="view-label" id="compare-version" aria-label="Compare with version"></select></div>
       </div>
       <div class="view-footer"><output id="tool-hint" aria-live="polite"></output><output id="measurement"></output><output id="dimensions" title="Assembly dimensions"></output></div>
@@ -79,6 +79,7 @@
           <label for="comment" id="comment-label">New comment</label>
           <div class="compose-context">
             <small id="target" aria-live="polite">Entire assembly</small>
+            <button type="button" id="undo-mark" class="quiet-button" hidden>Undo last</button>
             <button type="button" id="clear-target" class="quiet-button" data-icon="close" hidden>Clear</button>
           </div>
           <textarea id="comment" rows="3" maxlength="4000" placeholder="Write a comment…"></textarea>

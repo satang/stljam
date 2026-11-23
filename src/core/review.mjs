@@ -50,10 +50,14 @@ export function manifest(input) {
   return { parts };
 }
 
-export function annotation(input, model) {
-  const target = input.target ?? { kind: 'assembly' };
+export const maxCommentMarks = 12;
+
+export function targetMarks(target) {
+  return target?.kind === 'group' ? target.marks : target ? [target] : [];
+}
+
+function annotationTarget(target, hasPart) {
   requireValue(['assembly', 'part', 'point', 'region'].includes(target.kind), 'Invalid annotation type');
-  const hasPart = id => model.parts.some(part => part.id === id);
   const anchor = { kind: target.kind };
   if (target.kind === 'part' || target.kind === 'point') {
     requireValue(hasPart(target.partId), 'Unknown part');
@@ -81,6 +85,22 @@ export function annotation(input, model) {
       requireValue(total <= 81, 'Too many region samples');
       return { partId: part.partId, points: part.points.map(point => vector(point, 3, 'Region sample')) };
     });
+  }
+  return anchor;
+}
+
+export function annotation(input, model) {
+  const target = input.target ?? { kind: 'assembly' };
+  const hasPart = id => model.parts.some(part => part.id === id);
+  let anchor;
+  if (target.kind === 'group') {
+    requireValue(Array.isArray(target.marks) && target.marks.length >= 2 && target.marks.length <= maxCommentMarks, 'Invalid number of marks');
+    anchor = { kind: 'group', marks: target.marks.map(mark => {
+      requireValue(mark?.kind === 'point' || mark?.kind === 'region', 'Only points and regions can be grouped');
+      return annotationTarget(mark, hasPart);
+    }) };
+  } else {
+    anchor = annotationTarget(target, hasPart);
   }
   let view;
   if (input.view) {
@@ -114,21 +134,30 @@ export function feedbackMarkdown(batch, baseUrl = '') {
     ...(batch.replaces ? [`This submission replaces review ${batch.replaces}.`, ...(batch.comments.length ? ['This list contains the complete revised feedback.'] : ['The user withdrew every comment from that submission.'])] : []),
     'Part-local coordinates are in millimeters, with Z up in the assembly frame. Dimensions are measured on the mesh.',
     ...batch.comments.map(comment => {
-      const { target, measurement, capture, source, sources } = comment;
+      const { target, measurement, capture, detailCapture, source, sources } = comment;
       const coords = point => `[${point.map(value => Number(value.toFixed(3))).join(', ')}] mm`;
-      const region = target.parts?.map(({ partId, points }) => {
+      const regionLine = ({ partId, points }) => {
         const extent = fn => coords([0, 1, 2].map(i => fn(...points.map(point => point[i]))));
         const origin = sources?.find(item => item.partId === partId)?.source;
-        return `- ${partId}: ${points.length} samples between ${extent(Math.min)} and ${extent(Math.max)}${origin ? ` · ${origin}` : ''}`;
+        return `${partId}: ${points.length} samples between ${extent(Math.min)} and ${extent(Math.max)}${origin ? ` · ${origin}` : ''}`;
+      };
+      const region = target.parts?.map(part => '- ' + regionLine(part));
+      const pointLine = mark => `Local point${mark.surface === 'section' ? ' on the section plane' : ''}: ${coords(mark.point)}`;
+      const grouped = target.kind === 'group' && target.marks.map((mark, i) => {
+        if (mark.kind === 'region') return `${i + 1}. Region\n${mark.parts.map(part => '   - ' + regionLine(part)).join('\n')}`;
+        const origin = sources?.find(item => item.partId === mark.partId)?.source;
+        return `${i + 1}. ${mark.partId} · ${pointLine(mark)}${origin ? ` · ${origin}` : ''}`;
       });
       return [
         `## ${comment.id}${target.partId ? ` · ${target.partId}` : ''}`,
         comment.text,
-        target.point && `Local point${target.surface === 'section' ? ' on the section plane' : ''}: ${coords(target.point)}`,
+        target.point && pointLine(target),
         region && `Region with part-local surface samples:\n${region.join('\n')}`,
+        grouped && `Marks:\n${grouped.join('\n')}`,
         source && `Source: ${source}`,
         measurement && `Distance: ${measurement.mm.toFixed(3)} mm from A ${coords(measurement.a)} to B ${coords(measurement.b)} in assembly coordinates`,
-        capture && `Capture: ${baseUrl}/assets/${capture}`
+        capture && `Capture: ${baseUrl}/assets/${capture}`,
+        detailCapture && `Detail capture: ${baseUrl}/assets/${detailCapture}`
       ].filter(Boolean).join('\n');
     })
   ].join('\n\n');

@@ -88,6 +88,7 @@ export async function loadPart(part, index) {
   instance.matrix.fromArray(part.transform);
   instance.matrixAutoUpdate = false;
   instance.userData.partId = part.id;
+  instance.userData.label = part.label;
   instance.add(normalized);
   return instance;
 }

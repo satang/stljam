@@ -27,7 +27,7 @@ npm start
 
 Open [StlJam](http://127.0.0.1:32410) and choose **Load models**. The viewer loads on your machine and the checkout has no npm runtime dependencies.
 
-To use the CLI outside the checkout, install the `.tgz` from [GitHub Releases](https://github.com/satang/stljam-oss/releases) with `npm install --global ./stljam-0.1.0.tgz`, then run `stljam serve`. Use `stljam demo` and `stljam demo --next` in place of the checkout commands below.
+To use the CLI outside the checkout, install the `.tgz` from [GitHub Releases](https://github.com/satang/stljam-oss/releases) with `npm install --global ./stljam-0.1.1.tgz`, then run `stljam serve`. Use `stljam demo` and `stljam demo --next` in place of the checkout commands below.
 
 To try the review flow with the included synthetic gearbox, run this in a second terminal:
 
@@ -61,7 +61,7 @@ claude mcp add --transport stdio stljam -- node "$PWD/src/server/cli.mjs" mcp --
 
 The examples use a POSIX path. In PowerShell, replace the workspace argument with a Windows path such as `"C:\CAD\Gearbox"`. Start a new agent session after adding the server. Give the agent the [StlJam workflow](skills/stljam/SKILL.md) or try this prompt:
 
-> Open my assembly in StlJam, share the review link, and wait for my feedback. Apply the requested changes in the editable source and publish the revised preview to the same link.
+> Open my assembly in StlJam and reuse existing exports where possible. Share the review link and wait for my feedback. If the preview changes, publish the revision to the same link.
 
 When the page says **Agent listening**, submitting the review returns the batch to the waiting agent in its current turn. If it has finished waiting, the batch stays available. Use **Copy** on the submitted review and tell the agent to apply the feedback. The agent can also recover it by batch ID.
 

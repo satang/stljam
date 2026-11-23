@@ -2,11 +2,19 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { annotation, identifier, manifest, requireValue, textField } from '../core/review.mjs';
+import { annotation, identifier, manifest, requireValue, targetMarks, textField } from '../core/review.mjs';
 
 const now = () => new Date().toISOString();
 const decode = JSON.parse;
 const encode = JSON.stringify;
+
+function saveCapture(store, value, fallback = null) {
+  if (!value) return fallback;
+  requireValue(typeof value === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(value), 'Invalid PNG capture');
+  const bytes = Buffer.from(value.slice(22), 'base64');
+  requireValue(bytes.length <= 8_000_000 && bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a', 'Invalid PNG capture');
+  return store.addAsset(bytes, 'image/png');
+}
 
 export class Store {
   constructor(root) {
@@ -167,19 +175,16 @@ export class Store {
     requireValue(row, 'Version not found', 404);
     const payload = annotation(input, decode(row.model));
     const id = commentId ?? randomUUID();
-    const previous = commentId && this.db.prepare('SELECT capture, batch, revision FROM comments WHERE project = ? AND version = ? AND id = ?').get(project, version, commentId);
+    const previous = commentId && this.db.prepare('SELECT payload, capture, batch, revision FROM comments WHERE project = ? AND version = ? AND id = ?').get(project, version, commentId);
     if (commentId) requireValue(previous, 'Comment not found', 404);
     requireValue(!previous?.batch, 'This comment has already been submitted', 409);
     const revision = input.revision ?? null;
     if (previous) requireValue(previous.revision === revision, 'This draft belongs to another review', 409);
     this.#requireOpen(project, version, revision);
-    let capture = previous?.capture ?? null;
-    if (input.capture) {
-      requireValue(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(input.capture), 'Invalid PNG capture');
-      const bytes = Buffer.from(input.capture.slice(22), 'base64');
-      requireValue(bytes.length <= 8_000_000 && bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a', 'Invalid PNG capture');
-      capture = this.addAsset(bytes, 'image/png');
-    }
+    const capture = saveCapture(this, input.capture, previous?.capture);
+    const previousDetail = previous && decode(previous.payload).detailCapture;
+    const detailCapture = saveCapture(this, input.detailCapture, input.capture ? null : previousDetail);
+    if (detailCapture) payload.detailCapture = detailCapture;
     if (previous) this.db.prepare('UPDATE comments SET payload = ?, capture = ? WHERE id = ?').run(encode(payload), capture, id);
     else this.db.prepare('INSERT INTO comments (id, project, version, payload, capture, created, revision) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, project, version, encode(payload), capture, now(), revision);
     return { id, version, capture, ...payload };
@@ -261,10 +266,14 @@ export class Store {
     return rows.map(row => {
       const version = this.db.prepare('SELECT model FROM versions WHERE project = ? AND number = ?').get(project, row.version);
       const parts = decode(version.model).parts;
-      return { ...row, comments: this.comments(project, row.id).map(comment => ({
-        ...comment, source: parts.find(part => part.id === comment.target.partId)?.source,
-        sources: comment.target.parts?.map(({ partId }) => ({ partId, source: parts.find(part => part.id === partId)?.source }))
-      })) };
+      const sourceFor = id => parts.find(part => part.id === id)?.source;
+      return { ...row, comments: this.comments(project, row.id).map(comment => {
+        const { target } = comment;
+        const marks = targetMarks(target);
+        const ids = new Set(marks.flatMap(mark => mark.parts ? mark.parts.map(part => part.partId) : mark.partId ? [mark.partId] : []));
+        return { ...comment, source: sourceFor(target.partId),
+          sources: target.parts || target.kind === 'group' ? [...ids].map(partId => ({ partId, source: sourceFor(partId) })) : undefined };
+      }) };
     });
   }
 }
