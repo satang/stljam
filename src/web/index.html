@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StlJam · 3D review</title>
+  <link rel="stylesheet" href="/src/web/style.css">
+  <script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.min.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>
+  <script type="module" src="/src/web/app.mjs"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="StlJam, projects"><span></span>StlJam</a>
+    <strong id="project-title"></strong>
+    <div class="top-actions">
+      <label for="versions" id="version-label" hidden>Version</label>
+      <select id="versions" hidden></select>
+      <button id="compare" class="accent-button" data-icon="compare" aria-pressed="false" hidden>Compare</button>
+      <button id="upload" class="quiet-button" data-icon="upload" hidden>Load models</button>
+    </div>
+  </header>
+  <main id="projects" hidden>
+    <h1>Projects</h1>
+    <div id="project-list"></div>
+  </main>
+  <main id="review" hidden>
+    <aside class="parts">
+      <h2>Parts</h2>
+      <div id="parts"></div>
+      <button id="show-all" class="quiet-button" data-icon="eye" hidden>Show all</button>
+    </aside>
+    <section class="workspace" aria-label="3D viewer">
+      <div class="toolbar tools" aria-label="Viewer tools">
+        <div class="tool-group" role="group" aria-label="View and section">
+          <label class="view-picker" data-icon="cube">
+            <select id="view" aria-label="View">
+              <option value="iso">Isometric</option><option value="top">Top</option>
+              <option value="front">Front</option><option value="right">Right</option>
+            </select>
+          </label>
+          <button id="fit" data-icon="fit">Fit view</button>
+          <button id="section" data-icon="section" aria-pressed="false">Section</button>
+        </div>
+        <div class="tool-group" role="group" aria-label="Annotations">
+          <button id="measure" data-icon="measure" aria-pressed="false" title="Measure the distance between two surface points">Measure</button>
+          <button id="pin" data-icon="point" aria-pressed="false">Point</button>
+          <button id="region" data-icon="region" aria-pressed="false">Region</button>
+        </div>
+      </div>
+      <div id="section-controls" class="toolbar" hidden>
+        <select id="axis" aria-label="Section axis"><option>Z</option><option>X</option><option>Y</option></select>
+        <input id="offset" type="range" aria-label="Section offset">
+        <output id="offset-label"></output>
+        <label><input id="flip" type="checkbox"> Flip</label>
+      </div>
+      <div id="viewports">
+        <div class="viewport" id="viewport"><span class="view-label" id="active-view-label"></span><i id="marker" hidden></i></div>
+        <div class="viewport" id="comparison" hidden><select class="view-label" id="compare-version" aria-label="Compare with version"></select></div>
+      </div>
+      <div class="view-footer"><output id="tool-hint" aria-live="polite"></output><output id="measurement"></output><output id="dimensions" title="Assembly dimensions"></output></div>
+    </section>
+    <aside class="feedback" aria-labelledby="feedback-heading">
+      <header class="feedback-header">
+        <h2 id="feedback-heading">Comments</h2>
+        <p id="version-note" class="secondary" hidden></p>
+        <div class="review-actions">
+          <p id="review-status" class="secondary" aria-live="polite"></p>
+          <button type="button" id="submit" class="primary" data-icon="send" hidden>Submit review</button>
+        </div>
+        <p id="agent-status" aria-live="polite" hidden>Agent listening</p>
+        <p id="send-hint" class="secondary" hidden>Add the comment you are writing before submitting.</p>
+      </header>
+      <div id="review-stream" tabindex="0" aria-label="Comment list">
+        <p id="empty-comments" class="secondary" hidden></p>
+        <ol id="comments"></ol>
+      </div>
+      <section id="compose-dock" aria-labelledby="comment-label">
+        <form id="comment-form">
+          <label for="comment" id="comment-label">New comment</label>
+          <div class="compose-context">
+            <small id="target" aria-live="polite">Entire assembly</small>
+            <button type="button" id="clear-target" class="quiet-button" data-icon="close" hidden>Clear</button>
+          </div>
+          <textarea id="comment" rows="3" maxlength="4000" placeholder="Write a comment…"></textarea>
+          <div class="compose-actions">
+            <button type="submit" id="add-comment" class="accent-button" data-icon="add" title="Add the comment to the list (Enter)">Add comment</button>
+          </div>
+        </form>
+        <div id="closed-review" hidden>
+          <strong>Review submitted</strong>
+          <p class="secondary">Waiting for the next version.</p>
+          <button type="button" id="reopen-review" class="quiet-button" data-icon="edit">Reopen review</button>
+        </div>
+        <div id="amendment-controls" class="actions" hidden>
+          <button type="button" id="discard-amendment" class="quiet-button">Return to previous submission</button>
+        </div>
+      </section>
+    </aside>
+  </main>
+  <dialog id="upload-dialog">
+    <form id="upload-form">
+      <h2 id="upload-heading">Load models</h2>
+      <label>Title <input name="title" maxlength="130" required></label>
+      <label>STL, 3MF, or GLB files <input name="files" type="file" accept=".stl,.3mf,.glb" multiple required></label>
+      <label>STL units <select name="units"><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option><option value="in">inches</option></select></label>
+      <label id="note-label">Changes <input name="note" maxlength="4000"></label>
+      <div class="actions"><button type="submit" class="primary">Publish</button><button type="button" id="cancel-upload">Cancel</button></div>
+      <output id="upload-error" role="status"></output>
+    </form>
+  </dialog>
+  <output id="status" role="status" aria-live="polite"></output>
+</body>
+</html>

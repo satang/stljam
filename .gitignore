@@ -1,0 +1,5 @@
+node_modules/
+.stljam/
+*.sqlite*
+*.log
+__pycache__/

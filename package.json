@@ -1,0 +1,17 @@
+{
+  "name": "stljam",
+  "version": "0.1.0",
+  "description": "Local, versioned 3D design reviews for humans and coding agents",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/satang/stljam-oss.git" },
+  "keywords": ["cad", "stl", "3mf", "glb", "mcp", "design-review"],
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "bin": { "stljam": "./src/server/cli.mjs" },
+  "files": ["src/", "vendor/", "adapters/", "skills/", "scripts/demo.mjs", "docs/", "CHANGELOG.md", "CONTRIBUTING.md", "THIRD_PARTY_NOTICES.md"],
+  "scripts": {
+    "start": "node src/server/cli.mjs serve",
+    "test": "node --test",
+    "demo": "node src/server/cli.mjs demo"
+  }
+}
