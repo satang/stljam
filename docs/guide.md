@@ -6,7 +6,7 @@ StlJam helps you review a mechanical part or assembly with an AI coding agent. Y
 
 Start StlJam and load the example gearbox using the [quick start](../README.md#quick-start). The demo includes both versions, so you can try a complete review before connecting an agent.
 
-1. Open the demo link and select **Housing** in the parts list. Choose **Isolate selection** to hide the other parts.
+1. Open the demo link and select **Housing** in the parts list. Choose **Isolate selection** below the list to show only the housing. With no part selected, the same button reads **Hide all**. Choose **Show all** whenever you want to restore the full assembly.
 2. Turn on **Section** and move the plane to expose a wall. Choose **Measure** and click the two surfaces you want to measure between. The viewer shows the endpoints and the straight-line distance on the mesh.
 3. Choose **Region** and drag over the wall you want to discuss. The outline keeps its orientation in the model as you orbit. A region can include multiple visible parts. Isolate a part first to focus your feedback on it. For a single location, use **Point**.
 4. Write a comment in the lower-right composer. For example, “Thicken this wall outward and keep the inside face in place.” Choose **Add comment** or press Enter to add it to the list. You can add more comments and edit or remove them before sending.

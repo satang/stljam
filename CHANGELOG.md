@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Use **Hide all** when no part is selected, or **Isolate selection** to show only the selected part. **Show all** brings every part back.
+- Keep the full-width visibility controls below the scrollable Parts list. A green accent and a dedicated eye icon highlight **Isolate selection**.
+
 ## 0.1.3
 
 - Paint directly on visible model surfaces with mouse or touch. Erase paint and undo strokes or erases before adding the comment.

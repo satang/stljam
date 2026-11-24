@@ -319,8 +319,13 @@ function resetForm() {
 
 function renderParts(reveal = false) {
   const parts = currentVersion()?.model.parts ?? [];
-  $('show-all').hidden = !viewer.hidden.size;
-  $('isolate-part').hidden = !selected;
+  const isolate = parts.some(part => part.id === selected);
+  const hideParts = $('hide-parts');
+  hideParts.textContent = isolate ? 'Isolate selection' : 'Hide all';
+  hideParts.classList.toggle('isolate-action', isolate);
+  addIcon(hideParts, isolate ? 'isolate' : 'eyeOff');
+  hideParts.disabled = parts.every(({ id }) => viewer.hidden.has(id) === (id !== selected));
+  $('show-all').hidden = !parts.some(({ id }) => viewer.hidden.has(id));
   renderPartList($('parts'), {
     parts, selected, hidden: viewer.hidden, colors: viewer.partColors, expanded: expandedPartGroups, reveal, button,
     onSelect: id => {
@@ -654,6 +659,10 @@ async function boot() {
   $('compare').addEventListener('click', safe(() => comparedVersion
     ? closeCompare() : compare([...review.versions].reverse().find(version => version.number !== active).number)));
   $('compare-version').addEventListener('change', safe(event => compare(Number(event.target.value))));
+  $('hide-parts').addEventListener('click', () => {
+    if (modelLoading) return;
+    setHidden(currentVersion().model.parts.filter(part => part.id !== selected).map(part => part.id));
+  });
   $('show-all').addEventListener('click', () => setHidden([]));
   $('view').addEventListener('change', event => { if (active) viewer.fit(event.target.value); });
   $('fit').addEventListener('click', () => { if (active) viewer.fit($('view').value); });
@@ -669,9 +678,6 @@ async function boot() {
   window.addEventListener('keydown', event => { if (event.key === 'Escape' && mode) setMode(undefined); });
   $('measure').addEventListener('click', () => setMode(mode === 'measure' ? undefined : 'measure'));
   $('clear-target').addEventListener('click', clearTarget);
-  $('isolate-part').addEventListener('click', () => {
-    setHidden(currentVersion().model.parts.filter(part => part.id !== selected).map(part => part.id));
-  });
   $('undo-mark').addEventListener('click', () => {
     if (selectedComment || reviewClosed()) return;
     setTarget(markHistory.pop() ?? marksTarget(targetMarks(target).slice(0, -1)));

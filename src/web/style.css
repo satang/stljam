@@ -35,10 +35,11 @@ h2 { font-size: 1rem; margin-bottom: 1rem; }
 #review { display: grid; grid-template-columns: minmax(150px, 200px) minmax(320px, 1fr) clamp(280px, 27vw, 400px); height: calc(100dvh - 64px); }
 .parts, .feedback { background: var(--surface); }
 .parts { display: flex; flex-direction: column; min-block-size: 0; min-inline-size: 0; padding: 18px 12px; border-right: 1px solid var(--line); }
-#parts { overflow: auto; min-block-size: 0; scrollbar-gutter: stable; }
-.part-actions { display: flex; flex-wrap: wrap; gap: .3rem; }
-.part-actions button { font-size: .8rem; }
-.part-actions:has(button:not([hidden])) { margin-block-start: .5rem; }
+#parts { overflow: auto; min-block-size: 0; scrollbar-gutter: stable; margin-block-end: .55rem; }
+.part-actions { display: grid; flex-shrink: 0; gap: .35rem; margin-block-start: auto; padding-block-start: .55rem; border-block-start: 1px solid var(--line); }
+.part-actions button { min-inline-size: 0; min-block-size: 36px; padding: .4rem .55rem; font-size: .8rem; text-align: start; white-space: normal; }
+.part-actions .isolate-action { color: var(--signal-text); border-color: #3a776b; background: #1a3635; font-weight: 650; }
+.part-actions .isolate-action:hover:not(:disabled) { color: var(--signal-text); border-color: var(--signal); background: var(--signal-bg); }
 .feedback { border-left: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-block-size: 0; min-inline-size: 0; }
 .workspace { min-width: 0; display: flex; flex-direction: column; background: #101a23; }
 .toolbar, .view-footer { padding: 8px 10px; background: #18242c; border-bottom: 1px solid var(--line); }
@@ -82,7 +83,6 @@ select.view-label { pointer-events: auto; z-index: 2; }
 .group-children { margin-inline-start: .45rem; padding-inline-start: .22rem; border-inline-start: 1px solid var(--line); }
 form { display: grid; gap: .6rem; }
 textarea { resize: vertical; width: 100%; }
-#show-all { margin-top: .5rem; }
 .feedback-header { padding: 16px 16px 11px; border-bottom: 1px solid var(--line); }
 .feedback-header h2 { font-size: 1.12rem; margin-bottom: .45rem; }
 #version-note { font-size: .8rem; line-height: 1.4; margin-bottom: .7rem; }
