@@ -271,7 +271,15 @@ export class Store {
         const { target } = comment;
         const marks = targetMarks(target);
         const ids = new Set(marks.flatMap(mark => mark.parts ? mark.parts.map(part => part.partId) : mark.partId ? [mark.partId] : []));
-        return { ...comment, source: sourceFor(target.partId),
+        let measurement = comment.measurement;
+        if (measurement?.endpoints) {
+          const attachSource = hit => {
+            const part = parts.find(part => part.id === hit.partId);
+            return { ...hit, label: part?.label, source: part?.source, transform: part?.transform };
+          };
+          measurement = { ...measurement, endpoints: { a: attachSource(measurement.endpoints.a), b: attachSource(measurement.endpoints.b) } };
+        }
+        return { ...comment, measurement, source: sourceFor(target.partId),
           sources: target.parts || target.kind === 'group' ? [...ids].map(partId => ({ partId, source: sourceFor(partId) })) : undefined };
       }) };
     });

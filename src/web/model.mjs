@@ -5,7 +5,6 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { unzipSync, strFromU8 } from 'three/addons/libs/fflate.module.js';
 import { unitToMillimeters } from '../core/review.mjs';
 
-const colors = [0x8bd4c2, 0x7ab7e2, 0xe3af72, 0xb9a1e5, 0xe68993, 0xa1be7a];
 const modelCache = new Map();
 const cacheLimit = 128 * 1024 * 1024;
 let cacheSize = 0;
@@ -58,7 +57,7 @@ export function threeMFScale(buffer) {
   return unitToMillimeters[values[unit]];
 }
 
-export async function loadPart(part, index) {
+export async function loadPart(part) {
   const buffer = await modelBytes(part.asset);
   let object;
   let scale = unitToMillimeters[part.units];
@@ -67,7 +66,7 @@ export async function loadPart(part, index) {
     const geometry = new STLLoader().parse(buffer);
     if (!geometry.attributes.position?.count) throw new Error('The STL contains no triangles.');
     if (geometry.attributes.normal.array.every(value => value === 0)) geometry.computeVertexNormals();
-    object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: colors[index % colors.length], roughness: .7 }));
+    object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x8bd4c2, roughness: .7 }));
   } else if (part.format === '3mf') {
     const embedded = threeMFScale(buffer);
     scale = part.units === 'embedded' ? embedded : scale;

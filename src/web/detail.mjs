@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { dimensionLabel, drawMark, drawMarkup } from './markup.mjs';
 import { targetMarks } from '../core/review.mjs';
+import { disposePaintLayer, paintLayer, updatePaintLayer } from './paint.mjs';
 
 const palette = [0x79c8f4, 0xffb368, 0x91d6a0, 0xd0a4f4, 0xf08d9e, 0xebe080];
 const vector = coordinates => new THREE.Vector3(...coordinates);
@@ -57,7 +58,14 @@ export function captureDetail({ renderer, camera, frame, parts, caps, plane, tar
   canvas.width = Math.round(source.width * scale);
   const height = Math.round(source.height * scale);
   const shown = new Set(entries.map(entry => entry.part));
-  if (!shown.size || measurement?.b) for (const part of parts.values()) if (part.visible) shown.add(part);
+  if (measurement?.endpoints) {
+    for (const { partId } of Object.values(measurement.endpoints)) {
+      const part = parts.get(partId);
+      if (part) shown.add(part);
+    }
+  } else if (!shown.size || measurement?.b) {
+    for (const part of parts.values()) if (part.visible) shown.add(part);
+  }
   const renderedParts = [...shown];
   const legend = renderedParts.slice(0, 8);
   const columns = Math.min(legend.length, canvas.width >= 480 ? 3 : 2);
@@ -86,7 +94,7 @@ export function captureDetail({ renderer, camera, frame, parts, caps, plane, tar
     resources.push(outline, line);
   };
   const swatches = renderedParts.map((part, i) => {
-    const color = i < palette.length ? new THREE.Color(palette[i]) : new THREE.Color().setHSL((i * .618) % 1, .58, .65);
+    const color = new THREE.Color(part.userData.color ?? palette[i % palette.length]);
     const clippingPlanes = plane ? [plane] : [];
     const surface = new THREE.MeshStandardMaterial({
       color, roughness: .85, side: THREE.DoubleSide, clippingPlanes, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
@@ -101,10 +109,14 @@ export function captureDetail({ renderer, camera, frame, parts, caps, plane, tar
     }
     return '#' + color.getHexString();
   });
+  const paint = paintLayer(targetMarks(target), parts);
+  updatePaintLayer(paint, view, source.height / renderer.getPixelRatio(), plane ?? null, id => shown.has(parts.get(id)));
+  scene.add(paint);
   try {
     renderer.render(scene, view);
     ctx.drawImage(source, 0, 0, canvas.width, height);
   } finally {
+    disposePaintLayer(paint);
     resources.forEach(resource => resource.dispose());
   }
 
@@ -123,7 +135,7 @@ export function captureDetail({ renderer, camera, frame, parts, caps, plane, tar
       const y1 = Math.max(...xy.map(([, y]) => y)) + 7;
       region = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
     }
-    drawMark(ctx, { point: mark.kind === 'point' ? xy[0] : undefined, region, label: marks.length > 1 ? index + 1 : undefined });
+    drawMark(ctx, { point: mark.kind === 'point' ? xy[0] : undefined, region, labelAt: mark.kind === 'paint' ? xy[0] : undefined, label: marks.length > 1 ? index + 1 : undefined });
   });
   const ruler = measurement?.b && {
     a: project(vector(measurement.a)), b: project(vector(measurement.b)),

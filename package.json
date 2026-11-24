@@ -1,6 +1,6 @@
 {
   "name": "stljam",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Local, versioned 3D design reviews for humans and coding agents",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/satang/stljam-oss.git" },

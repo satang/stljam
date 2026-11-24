@@ -15,7 +15,13 @@ Start StlJam and load the example gearbox using the [quick start](../README.md#q
 
 StlJam sends the original view and, for marked or measured geometry, a close-up with feature edges and separate part colors. With an active section, the close-up looks straight at the saved plane. A close-up can help locate mating surfaces. Use the editable CAD model to verify clearances.
 
-For feedback about several locations, use **Point** or **Region** again before adding your comment. StlJam numbers the marks in the order you add them and keeps them together. Use **Undo last** to remove the most recent mark or **Clear** to start again.
+Each new measurement gives the agent the part, local point, and local surface normal for A and B, along with the distance in assembly coordinates. An endpoint on **Section** fill is labeled as a virtual surface. Pick actual model surfaces when you want the agent to identify the corresponding CAD faces.
+
+Use **Paint** to drag with the left mouse button or a finger across the visible surfaces you want to mark, including across parts. Right-click or right-drag to erase paint, or select **Erase** and use the same gesture as painting. **Undo last** reverses the latest stroke or erase. Press Esc to orbit again. For feedback about several locations, add more marks before writing your comment. StlJam numbers the marks in the order you add them and keeps them together. Use **Clear** to start again.
+
+Reloading the review in the same browser restores your last view, including hidden parts, the camera, the section plane, and any comment you were composing.
+
+StlJam assigns contrasting colors to nearby parts using their positions in the assembly. The Parts icons and section hatching use those colors. Textured surfaces keep their embedded appearance.
 
 ## Review your own design
 

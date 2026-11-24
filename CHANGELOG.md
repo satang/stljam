@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3
+
+- Paint directly on visible model surfaces with mouse or touch. Erase paint and undo strokes or erases before adding the comment.
+- Restore the previous view, hidden parts, comparison, measurement, and in-progress comment after a reload in the same browser.
+- Give nearby parts contrasting colors and carry those colors into section hatching, the Parts list, and detail captures.
+- Record the part, local point, and normal for each measurement endpoint. Label section-fill picks as virtual and include the CAD reference when available.
+
 ## 0.1.2
 
 - Organize larger assemblies with nested part groups defined in the manifest. Expand a group to inspect its parts, or show and hide the whole group at once.

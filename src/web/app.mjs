@@ -2,7 +2,7 @@ import { Viewport } from './viewport.mjs';
 import { dimensionLabel as mm } from './markup.mjs';
 import { commentCard, sentRound } from './feedback-list.mjs';
 import { addIcon } from './icons.mjs';
-import { maxCommentMarks, targetMarks } from '../core/review.mjs';
+import { annotation, maxCommentMarks, targetMarks } from '../core/review.mjs';
 import { renderPartList } from './parts.mjs';
 
 const $ = id => document.getElementById(id);
@@ -18,7 +18,61 @@ let commentBusy = false;
 let pendingSubmission;
 let activeRequest = 0;
 let statusTimeout;
+const markHistory = [];
 const expandedPartGroups = new Set();
+const storageKey = `stljam:view:${projectId}`;
+let saveTimer;
+
+function localView(key, value) {
+  try {
+    if (value !== undefined) localStorage.setItem(key, JSON.stringify(value));
+    else return JSON.parse(localStorage.getItem(key));
+  } catch {
+    // Reviews still work when browser storage is unavailable or full.
+  }
+}
+
+function saveWorkspace() {
+  clearTimeout(saveTimer);
+  if (!active || modelLoading) return;
+  localView(storageKey, { active, followLatest });
+  localView(`${storageKey}:${active}`, {
+    view: viewer.view(), selected, selectedComment, target, measurement,
+    text: $('comment').value, revision: amendment(), comparedVersion,
+    expanded: [...expandedPartGroups], preset: $('view').value, axis: $('axis').value
+  });
+}
+
+function queueWorkspaceSave() {
+  if (!active || modelLoading) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveWorkspace, 180);
+}
+
+function restoreWorkspace(saved, model) {
+  if (!saved) return;
+  const canCompose = !reviewClosed() && saved.revision === amendment();
+  selectedComment = review.comments.find(comment => comment.id === saved.selectedComment && comment.version === active)?.id;
+  const viewOnly = !selectedComment && !canCompose;
+  if (model.parts.some(part => part.id === saved.selected)) selected = saved.selected;
+  for (const key of Array.isArray(saved.expanded) ? saved.expanded : []) if (typeof key === 'string') expandedPartGroups.add(key);
+  if (['iso', 'top', 'front', 'right'].includes(saved.preset)) $('view').value = saved.preset;
+  if (['X', 'Y', 'Z'].includes(saved.axis)) $('axis').value = saved.axis;
+  if (canCompose && typeof saved.text === 'string') $('comment').value = saved.text.slice(0, 4000);
+  try {
+    const restored = annotation({
+      text: 'Saved view', view: saved.view,
+      target: viewOnly ? undefined : saved.target,
+      measurement: viewOnly ? undefined : saved.measurement
+    }, model);
+    viewer.restore(restored.view);
+    measurement = restored.measurement;
+    setTarget(restored.target);
+    displayMeasurement();
+  } catch {
+    // A saved view from a replaced local project may reference different geometry.
+  }
+}
 
 function status(text) {
   clearTimeout(statusTimeout);
@@ -57,7 +111,7 @@ function option(number, suffix = '') {
   return new Option(`v${number}${suffix}`, String(number));
 }
 
-function hasPendingMarks() { return !selectedComment && ['point', 'region', 'group'].includes(target.kind); }
+function hasPendingMarks() { return !selectedComment && ['point', 'region', 'paint', 'group'].includes(target.kind); }
 
 function editingDraft() {
   return !reviewClosed() && Boolean($('comment').value.trim() || inlineEdit || hasPendingMarks());
@@ -80,7 +134,7 @@ function updateComposer() {
   const closed = reviewClosed();
   const count = draftsForVersion().length;
   if (closed && mode) setMode(undefined);
-  for (const id of ['pin', 'region', 'measure']) $(id).disabled = closed;
+  for (const id of ['pin', 'region', 'paint', 'measure']) $(id).disabled = closed;
   $('comment-form').hidden = closed;
   $('closed-review').hidden = !closed;
   $('reopen-review').disabled = commentBusy;
@@ -96,6 +150,7 @@ function updateComposer() {
   $('submit').disabled = closed || commentBusy || typing || pending || Boolean(inlineEdit) || (!count && !correcting);
   $('send-hint').hidden = closed || (!typing && !pending);
   $('send-hint').textContent = typing ? 'Add the comment you are writing before submitting.' : 'Add a comment for the marks or clear them before submitting.';
+  queueWorkspaceSave();
 }
 
 function composeComment() {
@@ -126,7 +181,7 @@ function targetLabel(mark) {
     const ids = new Set(mark.marks.flatMap(item => item.parts ? item.parts.map(part => part.partId) : [item.partId]));
     return `${mark.marks.length} marks · ${[...ids].map(partName).join(', ')}`;
   }
-  if (mark.kind === 'region') return `Region · ${mark.parts.map(({ partId }) => partName(partId)).join(', ')}`;
+  if (mark.parts) return `${mark.kind === 'paint' ? 'Painted surface' : 'Region'} · ${mark.parts.map(({ partId }) => partName(partId)).join(', ')}`;
   if (!mark.partId) return 'Entire assembly';
   if (mark.kind === 'point') return `${mark.surface === 'section' ? 'Point on section' : 'Point'} · ${partName(mark.partId)}`;
   return partName(mark.partId);
@@ -135,7 +190,9 @@ function targetLabel(mark) {
 function updateMarker() {
   viewer?.setAnnotations(target, measurement, rulerStart);
   $('clear-target').hidden = target.kind === 'assembly' && !measurement && !rulerStart;
-  $('undo-mark').hidden = target.kind !== 'group';
+  $('undo-mark').hidden = Boolean(selectedComment) || (!hasPendingMarks() && !markHistory.length);
+  $('erase-paint').disabled = mode !== 'erase' && !canErase();
+  queueWorkspaceSave();
 }
 
 function setTarget(next) {
@@ -149,13 +206,28 @@ function setTarget(next) {
 }
 
 function appendMark(mark) {
-  const marks = selectedComment ? [] : targetMarks(target).filter(item => item.kind === 'point' || item.kind === 'region');
+  const marks = selectedComment ? [] : targetMarks(target).filter(item => ['point', 'region', 'paint'].includes(item.kind));
   if (marks.length === maxCommentMarks) {
     status(`Add the comment before marking more than ${maxCommentMarks} locations.`);
     return;
   }
+  changeMarks([...marks, mark]);
+}
+
+function marksTarget(marks) {
+  return marks.length > 1 ? { kind: 'group', marks } : marks[0] ?? { kind: 'assembly' };
+}
+
+function canErase() {
+  return !selectedComment && !reviewClosed() && targetMarks(target).some(mark => mark.kind === 'paint');
+}
+
+function changeMarks(marks) {
+  if (selectedComment) markHistory.length = 0;
+  markHistory.push(selectedComment ? { kind: 'assembly' } : target);
+  if (markHistory.length > 24) markHistory.shift();
   selectedComment = undefined;
-  setTarget(marks.length ? { kind: 'group', marks: [...marks, mark] } : mark);
+  setTarget(marksTarget(marks));
 }
 
 function focusComposer() {
@@ -169,9 +241,12 @@ function setMode(next) {
   $('pin').setAttribute('aria-pressed', String(mode === 'point'));
   $('measure').setAttribute('aria-pressed', String(mode === 'measure'));
   $('region').setAttribute('aria-pressed', String(mode === 'region'));
+  $('paint').setAttribute('aria-pressed', String(mode === 'paint'));
+  $('erase-paint').setAttribute('aria-pressed', String(mode === 'erase'));
+  $('erase-paint').hidden = mode !== 'paint' && mode !== 'erase';
   $('viewport').classList.toggle('picking', mode === 'point' || mode === 'measure');
-  viewer.setRegionMode(mode === 'region');
-  const hints = { point: 'Pick a point on the part', measure: 'Measure distance: select point A', region: 'Drag a box over visible surfaces. Isolate a part first to select only that part.' };
+  viewer.setDragMode(['region', 'paint', 'erase'].includes(mode) ? mode : undefined);
+  const hints = { point: 'Pick a point on the part', measure: 'Measure distance: select point A', region: 'Drag a box over visible surfaces. Isolate a part first to select only that part.', paint: 'Drag to paint. Right-drag to erase. Esc to orbit.', erase: 'Drag to erase. Esc to orbit.' };
   $('tool-hint').textContent = hints[mode] ?? '';
   updateMarker();
 }
@@ -186,12 +261,13 @@ function onPick(hit) {
   if (mode === 'measure') {
     if (!rulerStart) {
       measurement = undefined;
-      rulerStart = hit.world;
+      rulerStart = hit;
       $('tool-hint').textContent = 'Select point B';
       displayMeasurement();
       return;
     }
-    measurement = { a: rulerStart, b: hit.world };
+    const endpoint = ({ partId, point, faceNormal, normal, surface }) => ({ partId, point, normal: faceNormal ?? normal, surface: surface ?? 'mesh' });
+    measurement = { a: rulerStart.world, b: hit.world, endpoints: { a: endpoint(rulerStart), b: endpoint(hit) } };
     setMode(undefined);
     displayMeasurement();
     return;
@@ -206,12 +282,27 @@ function onPick(hit) {
 }
 
 function displayMeasurement() {
+  const onSection = ['a', 'b'].filter(key => measurement?.endpoints?.[key].surface === 'section').map(key => key.toUpperCase());
   $('measurement').textContent = measurement
-    ? `Mesh distance · ${mm(Math.hypot(...measurement.a.map((n, i) => n - measurement.b[i])))}` : '';
+    ? `Mesh distance · ${mm(Math.hypot(...measurement.a.map((n, i) => n - measurement.b[i])))}${onSection.length ? ` · ${onSection.join(' and ')} on section fill` : ''}` : '';
   updateMarker();
 }
 
+function markSurface(mark, hint) {
+  if (modelLoading || commentBusy || reviewClosed()) return;
+  if (!mark) {
+    $('tool-hint').textContent = hint;
+    return;
+  }
+  selected = mark.parts.length === 1 ? mark.parts[0].partId : undefined;
+  appendMark(mark);
+  if (mark.kind !== 'paint') setMode(undefined);
+  renderParts(Boolean(selected));
+  focusComposer();
+}
+
 function clearTarget() {
+  markHistory.length = 0;
   selected = undefined;
   measurement = undefined;
   setMode(undefined);
@@ -231,7 +322,7 @@ function renderParts(reveal = false) {
   $('show-all').hidden = !viewer.hidden.size;
   $('isolate-part').hidden = !selected;
   renderPartList($('parts'), {
-    parts, selected, hidden: viewer.hidden, expanded: expandedPartGroups, reveal, button,
+    parts, selected, hidden: viewer.hidden, colors: viewer.partColors, expanded: expandedPartGroups, reveal, button,
     onSelect: id => {
       selected = id;
       if (!reviewClosed() && (target.kind === 'part' || target.kind === 'assembly')) setTarget({ kind: 'part', partId: id });
@@ -251,6 +342,7 @@ function renderParts(reveal = false) {
       renderParts();
     }
   });
+  queueWorkspaceSave();
 }
 
 function setHidden(values) {
@@ -292,11 +384,12 @@ async function compare(number) {
   if (!version) return;
   $('comparison').hidden = false;
   comparison ??= new Viewport($('comparison'), { onCamera: view => { viewer.restore(view, true); updateMarker(); } });
-  if (await comparison.load(version.model, true)) {
+  if (await comparison.load(version.model, true, viewer.partColors)) {
     comparedVersion = number;
     comparison.restore(viewer.view());
     $('compare-version').value = String(number);
     $('compare').setAttribute('aria-pressed', 'true');
+    queueWorkspaceSave();
   }
 }
 
@@ -306,6 +399,7 @@ function closeCompare() {
   comparedVersion = undefined;
   $('comparison').hidden = true;
   $('compare').setAttribute('aria-pressed', 'false');
+  queueWorkspaceSave();
 }
 
 function renderFeedback() {
@@ -405,6 +499,7 @@ async function copyRound(batch) {
 }
 
 function showComment(comment) {
+  markHistory.length = 0;
   setMode(undefined);
   viewer.restore(comment.view);
   comparison?.restore(viewer.view());
@@ -419,6 +514,8 @@ function showComment(comment) {
 async function openVersion(number) {
   const item = review.versions.find(version => version.number === number);
   if (!item) return;
+  saveWorkspace();
+  const saved = localView(`${storageKey}:${number}`);
   const token = ++activeRequest;
   modelLoading = true;
   try {
@@ -426,16 +523,21 @@ async function openVersion(number) {
     active = number;
     inlineEdit = selectedComment = undefined;
     resetForm();
+    restoreWorkspace(saved, item.model);
     $('active-view-label').textContent = `v${number}`;
     $('versions').value = String(number);
     $('dimensions').textContent = viewer.size().map(mm).join(' × ');
     if (comparedVersion === number) closeCompare();
     versionOptions();
-    renderParts();
+    renderParts(Boolean(selected));
     renderFeedback();
     syncSectionControls();
+    if (saved?.comparedVersion !== number && review.versions.some(version => version.number === saved?.comparedVersion)) await compare(saved.comparedVersion);
   } finally {
-    if (token === activeRequest) modelLoading = false;
+    if (token === activeRequest) {
+      modelLoading = false;
+      saveWorkspace();
+    }
   }
 }
 
@@ -453,7 +555,14 @@ async function loadReview() {
   review = await api(endpoint);
   $('project-title').textContent = review.title;
   const latest = review.versions.at(-1).number;
-  if (!active || (followLatest && active !== latest && !editingDraft() && !commentBusy)) await openVersion(latest);
+  if (!active) {
+    const last = localView(storageKey);
+    const draft = last && localView(`${storageKey}:${last.active}`);
+    const keepDraft = draft && (draft.text || (!draft.selectedComment && ['point', 'region', 'paint', 'group'].includes(draft.target?.kind)));
+    const number = (last?.followLatest === false || keepDraft) && review.versions.some(version => version.number === last.active) ? last.active : latest;
+    followLatest = last?.followLatest !== false || number === latest;
+    await openVersion(number);
+  } else if (followLatest && active !== latest && !editingDraft() && !commentBusy) await openVersion(latest);
   else {
     versionOptions();
     renderFeedback();
@@ -527,18 +636,10 @@ async function boot() {
   $('version-label').hidden = false;
   viewer = new Viewport($('viewport'), {
     onPick, onResize: updateMarker,
-    onRegion: region => {
-      if (modelLoading || commentBusy || reviewClosed()) return;
-      if (!region) {
-        $('tool-hint').textContent = 'Drag a box over a visible surface';
-        return;
-      }
-      selected = region.parts.length === 1 ? region.parts[0].partId : undefined;
-      appendMark(region);
-      setMode(undefined);
-      renderParts(Boolean(selected));
-      focusComposer();
-    },
+    onRegion: region => markSurface(region, 'Drag a box over a visible surface'),
+    onPaint: paint => markSurface(paint, 'Drag the brush over a visible surface'),
+    canErase,
+    onErase: marks => { if (canErase()) changeMarks(marks); },
     onCamera: view => { comparison?.restore(view, true); updateMarker(); }
   });
   $('versions').addEventListener('change', safe(async event => {
@@ -562,6 +663,9 @@ async function boot() {
   $('flip').addEventListener('change', event => applySection({ ...viewer.section, flip: event.target.checked }));
   $('pin').addEventListener('click', () => setMode(mode === 'point' ? undefined : 'point'));
   $('region').addEventListener('click', () => setMode(mode === 'region' ? undefined : 'region'));
+  $('paint').addEventListener('click', () => setMode(mode === 'paint' ? undefined : 'paint'));
+  $('erase-paint').addEventListener('click', () => setMode(mode === 'erase' ? 'paint' : 'erase'));
+  window.addEventListener('pagehide', saveWorkspace);
   window.addEventListener('keydown', event => { if (event.key === 'Escape' && mode) setMode(undefined); });
   $('measure').addEventListener('click', () => setMode(mode === 'measure' ? undefined : 'measure'));
   $('clear-target').addEventListener('click', clearTarget);
@@ -569,9 +673,8 @@ async function boot() {
     setHidden(currentVersion().model.parts.filter(part => part.id !== selected).map(part => part.id));
   });
   $('undo-mark').addEventListener('click', () => {
-    if (target.kind !== 'group') return;
-    const marks = target.marks.slice(0, -1);
-    setTarget(marks.length === 1 ? marks[0] : { kind: 'group', marks });
+    if (selectedComment || reviewClosed()) return;
+    setTarget(markHistory.pop() ?? marksTarget(targetMarks(target).slice(0, -1)));
   });
   $('comment').addEventListener('input', updateComposer);
   $('reopen-review').addEventListener('click', safe(() => reopenRound(lastBatch())));

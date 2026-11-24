@@ -9,7 +9,7 @@ StlJam is a local browser workspace for reviewing mechanical parts and assemblie
 ## How it works
 
 1. **Publish a preview.** The agent exports the model from your editable CAD source and shares a local review link. You can also load models directly in the browser.
-2. **Review the geometry.** Isolate a part, cut a section, mark a point or region, or measure between two surfaces. Comments save the view, annotation, measurement, and a screenshot when available.
+2. **Review the geometry.** Isolate a part, cut a section, mark a point or region, paint a surface, or measure between two surfaces. Comments save the view, annotation, measurement, and a screenshot when available.
 3. **Submit one round of feedback.** Add and edit comments in the list, then use **Submit review** to send the batch to the agent and close that version.
 4. **Compare the revision.** The agent updates the editable source and publishes a new preview to the same link. Compare versions side by side and open an original comment to restore its view.
 
@@ -27,7 +27,7 @@ npm start
 
 Open [StlJam](http://127.0.0.1:32410) and choose **Load models**. The viewer loads on your machine and the checkout has no npm runtime dependencies.
 
-To use the CLI outside the checkout, install the `.tgz` from [GitHub Releases](https://github.com/satang/stljam-oss/releases) with `npm install --global ./stljam-0.1.2.tgz`, then run `stljam serve`. Use `stljam demo` and `stljam demo --next` in place of the checkout commands below.
+To use the CLI outside the checkout, install the `.tgz` from [GitHub Releases](https://github.com/satang/stljam-oss/releases) with `npm install --global ./stljam-0.1.3.tgz`, then run `stljam serve`. Use `stljam demo` and `stljam demo --next` in place of the checkout commands below.
 
 To try the review flow with the included synthetic gearbox, run this in a second terminal:
 

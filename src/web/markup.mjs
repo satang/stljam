@@ -1,6 +1,6 @@
 export const dimensionLabel = value => `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value)} mm`;
 
-export function drawMark(ctx, { point, region, regionBack, label }) {
+export function drawMark(ctx, { point, region, regionBack, labelAt, label }) {
   if (point) {
     ctx.beginPath();
     ctx.arc(...point, 7, 0, Math.PI * 2);
@@ -11,8 +11,9 @@ export function drawMark(ctx, { point, region, regionBack, label }) {
     ctx.stroke();
   }
   if (region) drawMarkup(ctx, { region, regionBack });
-  if (!label || !(point || region)) return;
-  const [x, y] = point ?? region[0];
+  const position = labelAt ?? point ?? region?.[0];
+  if (!label || !position) return;
+  const [x, y] = position;
   ctx.save();
   ctx.font = '700 13px system-ui';
   ctx.lineWidth = 4;

@@ -48,6 +48,8 @@
           <button id="measure" data-icon="measure" aria-pressed="false" title="Measure the distance between two surface points">Measure</button>
           <button id="pin" data-icon="point" aria-pressed="false">Point</button>
           <button id="region" data-icon="region" aria-pressed="false">Region</button>
+          <button id="paint" data-icon="paint" aria-pressed="false">Paint</button>
+          <button id="erase-paint" data-icon="erase" aria-pressed="false" hidden>Erase</button>
         </div>
       </div>
       <div id="section-controls" class="toolbar" hidden>
@@ -82,7 +84,7 @@
           <label for="comment" id="comment-label">New comment</label>
           <div class="compose-context">
             <small id="target" aria-live="polite">Entire assembly</small>
-            <button type="button" id="undo-mark" class="quiet-button" hidden>Undo last</button>
+            <button type="button" id="undo-mark" class="quiet-button" title="Undo the last mark or erase" hidden>Undo last</button>
             <button type="button" id="clear-target" class="quiet-button" data-icon="close" hidden>Clear</button>
           </div>
           <textarea id="comment" rows="3" maxlength="4000" placeholder="Write a comment…"></textarea>

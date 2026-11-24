@@ -40,7 +40,7 @@ function showLabel(button, label) {
   button.title = label;
 }
 
-export function renderPartList(list, { parts, selected, hidden, expanded, reveal, button, onSelect, onVisibility, onExpand }) {
+export function renderPartList(list, { parts, selected, hidden, colors, expanded, reveal, button, onSelect, onVisibility, onExpand }) {
   const focused = list.contains(document.activeElement) ? document.activeElement.dataset.control : undefined;
   const controls = new Map();
   const control = (element, key) => {
@@ -72,6 +72,8 @@ export function renderPartList(list, { parts, selected, hidden, expanded, reveal
       row.dataset.partId = node.id;
       const select = control(button(node.label, () => onSelect(node.id), selected === node.id), `part:${node.id}`);
       showLabel(select, node.label);
+      const color = colors.get(node.id);
+      if (color !== undefined) select.style.setProperty('--part-color', `#${color.toString(16).padStart(6, '0')}`);
       row.append(addIcon(select, 'cube'), visibility(node.label, [node.id], `visibility:${node.id}`));
       return row;
     }

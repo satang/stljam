@@ -136,8 +136,10 @@ test('preserves a multi-part region and a group of marks with their sources', as
   };
   const saved = await request(base, `${path}/comments`, { ...draft, target: region });
   assert.deepEqual(saved.target, region);
-  const group = { kind: 'group', marks: [draft.target, region, { kind: 'point', partId: 'duplicate', point: [3, 4, 5] }] };
-  await assert.rejects(request(base, `${path}/comments`, { ...draft, target: { ...group, marks: [draft.target, group] } }), /Only points and regions/);
+  const paint = { kind: 'paint', radius: .5, parts: [{ partId: 'gearbox', points: [[2, 3, 4]] }, { partId: 'duplicate', points: [[3, 4, 5]] }] };
+  const group = { kind: 'group', marks: [draft.target, region, { kind: 'point', partId: 'duplicate', point: [3, 4, 5] }, paint] };
+  await assert.rejects(request(base, `${path}/comments`, { ...draft, target: { ...group, marks: [draft.target, group] } }), /Only points, regions and paint strokes/);
+  await assert.rejects(request(base, `${path}/comments`, { ...draft, target: { ...paint, radius: 0 } }), /Invalid paint radius/);
   const grouped = await request(base, `${path}/comments`, { ...draft, text: 'Check the mating parts', target: group });
   assert.deepEqual(grouped.target, group);
   const { id } = await request(base, `${path}/submit`, { version: 1 });
@@ -151,6 +153,7 @@ test('preserves a multi-part region and a group of marks with their sources', as
   assert.match(feedback.markdown, /1\. gearbox.*Local point/);
   assert.match(feedback.markdown, /2\. Region/);
   assert.match(feedback.markdown, /3\. duplicate.*Local point/);
+  assert.match(feedback.markdown, /4\. Painted surface \(brush radius 0\.5 mm\)/);
   assert.match(feedback.markdown, /gearbox: 2 samples between \[1, 2, 3\] mm and \[4, 5, 6\] mm/);
   assert.match(feedback.markdown, /from A \[0, 0, 0\] mm to B \[20, 0, 0\] mm/);
 });
@@ -243,11 +246,22 @@ test('negotiates MCP and delivers a review while listening', async t => {
   assert.deepEqual(opened.parts, [{ id: 'gearbox', label: 'gearbox' }, { id: 'duplicate', label: 'duplicate', group: ['Assembly', 'Drivetrain'] }]);
   const wait = rpc('tools/call', { name: 'wait_for_feedback', arguments: { projectId: 'gearbox', seconds: 4 } });
   await waitUntilListening(base);
-  const saved = await request(base, '/api/projects/gearbox/comments', { ...draft, detailCapture: pixel });
+  const endpoints = {
+    a: { partId: 'gearbox', point: [0, 0, 0], normal: [0, 0, 1], surface: 'mesh' },
+    b: { partId: 'duplicate', point: [15, 0, 0], normal: [0, -1, 0], surface: 'section' }
+  };
+  const saved = await request(base, '/api/projects/gearbox/comments', {
+    ...draft, measurement: { ...draft.measurement, endpoints }, detailCapture: pixel
+  });
+  assert.deepEqual(saved.measurement.endpoints, endpoints);
   const batch = await request(base, '/api/projects/gearbox/submit', { version: 1 });
   const delivered = await wait;
   assert.equal(payload(delivered).cursor, batch.id);
   assert.equal(payload(delivered).batches[0].comments[0].detailCapture, saved.detailCapture);
+  const deliveredMeasurement = payload(delivered).batches[0].comments[0].measurement;
+  assert.equal(deliveredMeasurement.endpoints.a.source, 'example.FCStd#Body');
+  assert.equal(deliveredMeasurement.endpoints.b.transform[12], 5);
+  assert.match(payload(delivered).batches[0].markdown, /B: duplicate.*section fill \(virtual/);
   assert.deepEqual(delivered.result.content.slice(1), [
     { type: 'text', text: `Original view for comment ${saved.id}` },
     { type: 'image', mimeType: 'image/png', data: pixel.slice(22) },

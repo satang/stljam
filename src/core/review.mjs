@@ -56,13 +56,14 @@ export function manifest(input) {
 }
 
 export const maxCommentMarks = 12;
+export const maxPaintSamples = 400;
 
 export function targetMarks(target) {
   return target?.kind === 'group' ? target.marks : target ? [target] : [];
 }
 
 function annotationTarget(target, hasPart) {
-  requireValue(['assembly', 'part', 'point', 'region'].includes(target.kind), 'Invalid annotation type');
+  requireValue(['assembly', 'part', 'point', 'region', 'paint'].includes(target.kind), 'Invalid annotation type');
   const anchor = { kind: target.kind };
   if (target.kind === 'part' || target.kind === 'point') {
     requireValue(hasPart(target.partId), 'Unknown part');
@@ -76,18 +77,24 @@ function annotationTarget(target, hasPart) {
       anchor.surface = target.surface;
     }
   }
-  if (target.kind === 'region') {
-    requireValue(Array.isArray(target.outline) && target.outline.length === 4, 'Invalid region outline');
-    requireValue(Array.isArray(target.parts) && target.parts.length > 0 && target.parts.length <= 81, 'Invalid parts in region');
+  if (target.kind === 'region' || target.kind === 'paint') {
+    const limit = target.kind === 'paint' ? maxPaintSamples : 81;
+    if (target.kind === 'paint') {
+      requireValue(Number.isFinite(target.radius) && target.radius > 0, 'Invalid paint radius');
+      anchor.radius = target.radius;
+    } else {
+      requireValue(Array.isArray(target.outline) && target.outline.length === 4, 'Invalid region outline');
+      anchor.outline = target.outline.map(point => vector(point, 3, 'Region outline'));
+    }
+    requireValue(Array.isArray(target.parts) && target.parts.length > 0 && target.parts.length <= limit, 'Invalid parts in surface mark');
     const ids = new Set();
     let total = 0;
-    anchor.outline = target.outline.map(point => vector(point, 3, 'Region outline'));
     anchor.parts = target.parts.map(part => {
       requireValue(part && hasPart(part.partId) && !ids.has(part.partId), 'Invalid part in region');
       ids.add(part.partId);
       requireValue(Array.isArray(part.points) && part.points.length > 0, 'Invalid region samples');
       total += part.points.length;
-      requireValue(total <= 81, 'Too many region samples');
+      requireValue(total <= limit, 'Too many surface samples');
       return { partId: part.partId, points: part.points.map(point => vector(point, 3, 'Region sample')) };
     });
   }
@@ -101,7 +108,7 @@ export function annotation(input, model) {
   if (target.kind === 'group') {
     requireValue(Array.isArray(target.marks) && target.marks.length >= 2 && target.marks.length <= maxCommentMarks, 'Invalid number of marks');
     anchor = { kind: 'group', marks: target.marks.map(mark => {
-      requireValue(mark?.kind === 'point' || mark?.kind === 'region', 'Only points and regions can be grouped');
+      requireValue(['point', 'region', 'paint'].includes(mark?.kind), 'Only points, regions and paint strokes can be grouped');
       return annotationTarget(mark, hasPart);
     }) };
   } else {
@@ -125,10 +132,21 @@ export function annotation(input, model) {
   }
   let measurement;
   if (input.measurement) {
-    const { a, b } = input.measurement;
+    const { a, b, endpoints } = input.measurement;
     vector(a, 3, 'Start point');
     vector(b, 3, 'End point');
     measurement = { a, b, mm: Math.hypot(...a.map((n, index) => n - b[index])), method: 'mesh' };
+    if (endpoints !== undefined) {
+      const endpoint = (hit, label) => {
+        requireValue(hit && hasPart(hit.partId), `Invalid part for endpoint ${label}`);
+        requireValue(hit.surface === 'mesh' || hit.surface === 'section', `Invalid surface for endpoint ${label}`);
+        const point = vector(hit.point, 3, `Endpoint ${label} local point`);
+        const normal = vector(hit.normal, 3, `Endpoint ${label} normal`);
+        requireValue(normal.some(value => value !== 0), `Invalid endpoint ${label} normal`);
+        return { partId: hit.partId, point, normal, surface: hit.surface };
+      };
+      measurement.endpoints = { a: endpoint(endpoints?.a, 'A'), b: endpoint(endpoints?.b, 'B') };
+    }
   }
   return { text: textField(input.text, 'Comment'), target: anchor, view, measurement };
 }
@@ -148,19 +166,26 @@ export function feedbackMarkdown(batch, baseUrl = '') {
       };
       const region = target.parts?.map(part => '- ' + regionLine(part));
       const pointLine = mark => `Local point${mark.surface === 'section' ? ' on the section plane' : ''}: ${coords(mark.point)}`;
+      const surfaceLabel = mark => mark.kind === 'paint' ? `Painted surface (brush radius ${Number(mark.radius.toPrecision(3))} mm)` : 'Region';
       const grouped = target.kind === 'group' && target.marks.map((mark, i) => {
-        if (mark.kind === 'region') return `${i + 1}. Region\n${mark.parts.map(part => '   - ' + regionLine(part)).join('\n')}`;
+        if (mark.parts) return `${i + 1}. ${surfaceLabel(mark)}\n${mark.parts.map(part => '   - ' + regionLine(part)).join('\n')}`;
         const origin = sources?.find(item => item.partId === mark.partId)?.source;
         return `${i + 1}. ${mark.partId} · ${pointLine(mark)}${origin ? ` · ${origin}` : ''}`;
       });
+      const describeEndpoint = (label, hit) => {
+        const normal = hit.normal.map(value => Number(value.toFixed(5))).join(', ');
+        const surface = hit.surface === 'section' ? 'section fill (virtual, no CAD face at this point)' : 'mesh surface';
+        return `- ${label}: ${hit.label ?? hit.partId} [${hit.partId}] · ${surface} · local point ${coords(hit.point)} · local normal [${normal}]${hit.source ? ` · ${hit.source}` : ''}`;
+      };
       return [
         `## ${comment.id}${target.partId ? ` · ${target.partId}` : ''}`,
         comment.text,
         target.point && pointLine(target),
-        region && `Region with part-local surface samples:\n${region.join('\n')}`,
+        region && `${surfaceLabel(target)} with part-local surface samples:\n${region.join('\n')}`,
         grouped && `Marks:\n${grouped.join('\n')}`,
         source && `Source: ${source}`,
         measurement && `Distance: ${measurement.mm.toFixed(3)} mm from A ${coords(measurement.a)} to B ${coords(measurement.b)} in assembly coordinates`,
+        measurement?.endpoints && `Measurement endpoints:\n${describeEndpoint('A', measurement.endpoints.a)}\n${describeEndpoint('B', measurement.endpoints.b)}`,
         capture && `Capture: ${baseUrl}/assets/${capture}`,
         detailCapture && `Detail capture: ${baseUrl}/assets/${detailCapture}`
       ].filter(Boolean).join('\n');

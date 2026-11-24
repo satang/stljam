@@ -4,7 +4,9 @@ import { disposePart, loadPart } from './model.mjs';
 import { dimensionLabel, drawMark, drawMarkup } from './markup.mjs';
 import { sectionTriangles } from './section.mjs';
 import { captureDetail } from './detail.mjs';
-import { targetMarks } from '../core/review.mjs';
+import { maxPaintSamples, targetMarks } from '../core/review.mjs';
+import { disposePaintLayer, erasePaint, paintLayer, updatePaintLayer } from './paint.mjs';
+import { assignPartColors } from './part-colors.mjs';
 
 const axes = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
 const directions = { iso: [1, -1.3, .9], front: [0, -1, 0], right: [1, 0, 0], top: [0, -.0001, 1] };
@@ -14,9 +16,9 @@ function cutMaterial() {
   const tile = document.createElement('canvas');
   tile.width = tile.height = 48;
   const ctx = tile.getContext('2d');
-  ctx.fillStyle = '#efad62';
+  ctx.fillStyle = '#f2f2f2';
   ctx.fillRect(0, 0, 48, 48);
-  ctx.strokeStyle = '#b36e37';
+  ctx.strokeStyle = '#939393';
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(0, 48);
@@ -33,10 +35,11 @@ function cutMaterial() {
 }
 
 export class Viewport {
-  constructor(parent, { onPick = () => {}, onRegion = () => {}, onCamera = () => {}, onResize = () => {} } = {}) {
+  constructor(parent, { onPick = () => {}, onRegion = () => {}, onPaint = () => {}, onErase = () => {}, canErase = () => false, onCamera = () => {}, onResize = () => {} } = {}) {
     this.parent = parent;
     this.onCamera = onCamera;
     this.parts = new Map();
+    this.partColors = new Map();
     this.bounds = new THREE.Box3();
     this.scene = new THREE.Scene();
     this.stage = new THREE.Group();
@@ -70,6 +73,9 @@ export class Viewport {
     this.resize.observe(parent);
     this.hitTester = new THREE.Raycaster();
     const canvas = this.renderer.domElement;
+    canvas.addEventListener('contextmenu', event => {
+      if (this.dragMode === 'paint' || this.dragMode === 'erase') event.preventDefault();
+    });
     let start;
     canvas.addEventListener('pointerdown', event => {
       start = event.button === 0 ? [event.clientX, event.clientY] : undefined;
@@ -79,30 +85,55 @@ export class Viewport {
       start = undefined;
     });
     canvas.addEventListener('pointerdown', event => {
-      if (!this.regionMode || event.button !== 0 || this.drag) return;
+      if (!this.dragMode || this.drag || (event.button !== 0 && (event.button !== 2 || this.dragMode !== 'paint'))) return;
       event.stopImmediatePropagation();
+      const erasing = event.button === 2 || this.dragMode === 'erase';
+      if (erasing && !canErase()) return;
       canvas.setPointerCapture(event.pointerId);
       const cursor = this.cursor(event);
-      this.drag = { pointerId: event.pointerId, start: cursor, end: cursor };
-      this.drawAnnotations();
+      this.drag = { pointerId: event.pointerId, start: cursor, end: cursor, mode: erasing ? 'erase' : this.dragMode, count: 0 };
+      if (this.drag.mode !== 'region') {
+        this.drag.radius = (erasing ? 13 : 9) * (this.camera.top - this.camera.bottom) / (this.camera.zoom * this.parent.clientHeight);
+        if (erasing) {
+          this.drag.marks = targetMarks(this.annotationTarget);
+          this.drag.original = this.drag.marks;
+          this.drag.direction = this.camera.getWorldDirection(new THREE.Vector3());
+        } else this.drag.stroke = { kind: 'paint', radius: this.drag.radius, parts: [] };
+        this.extendBrush(cursor, true);
+      } else this.drawAnnotations();
     }, true);
     canvas.addEventListener('pointermove', event => {
       if (this.drag?.pointerId !== event.pointerId) return;
       event.stopImmediatePropagation();
-      this.drag.end = this.cursor(event);
-      this.drawAnnotations();
+      const cursor = this.cursor(event);
+      if (this.drag.mode !== 'region') this.extendBrush(cursor);
+      else {
+        this.drag.end = cursor;
+        this.drawAnnotations();
+      }
     }, true);
-    const finishRegion = event => {
+    const finishDrag = event => {
       if (this.drag?.pointerId !== event.pointerId) return;
       event.stopImmediatePropagation();
       const drag = this.drag;
       this.drag = undefined;
-      this.drawAnnotations();
-      if (event.type === 'pointerup') onRegion(this.pickRegion(drag.start, this.cursor(event)));
+      if (drag.mode !== 'region') {
+        disposePaintLayer(this.paintPreview);
+        this.paintPreview = undefined;
+        if (this.paintMarks) this.paintMarks.visible = true;
+        this.render();
+        if (event.type === 'pointerup') {
+          if (drag.mode === 'paint') onPaint(drag.count ? drag.stroke : undefined);
+          else if (drag.original !== drag.marks) onErase(drag.marks);
+        }
+      } else {
+        this.drawAnnotations();
+        if (event.type === 'pointerup') onRegion(this.pickRegion(drag.start, this.cursor(event)));
+      }
     };
-    canvas.addEventListener('pointerup', finishRegion, true);
-    canvas.addEventListener('pointercancel', finishRegion, true);
-    canvas.addEventListener('lostpointercapture', finishRegion, true);
+    canvas.addEventListener('pointerup', finishDrag, true);
+    canvas.addEventListener('pointercancel', finishDrag, true);
+    canvas.addEventListener('lostpointercapture', finishDrag, true);
     this.frame = 100;
     this.hidden = new Set();
     this.generation = 0;
@@ -110,7 +141,7 @@ export class Viewport {
     this.render();
   }
 
-  async load(model, keepView = false) {
+  async load(model, keepView = false, preferredColors = this.partColors) {
     const token = ++this.generation;
     const results = await Promise.allSettled(model.parts.map(loadPart));
     const ready = results.filter(result => result.status === 'fulfilled').map(result => result.value);
@@ -128,8 +159,26 @@ export class Viewport {
       this.stage.add(part);
     }
     this.stage.updateMatrixWorld(true);
-    this.bounds.setFromObject(this.stage);
+    this.bounds.makeEmpty();
+    const boxes = ready.flatMap(part => {
+      const bounds = new THREE.Box3().setFromObject(part);
+      if (bounds.isEmpty()) return [];
+      this.bounds.union(bounds);
+      return [{ id: part.userData.partId, min: bounds.min.toArray(), max: bounds.max.toArray() }];
+    });
     if (this.bounds.isEmpty() || !this.bounds.min.toArray().every(Number.isFinite) || !this.bounds.max.toArray().every(Number.isFinite)) throw new Error('The model has no valid visible geometry.');
+    this.partColors = assignPartColors(boxes, this.bounds.getSize(new THREE.Vector3()).length(), preferredColors);
+    for (const part of ready) {
+      const color = this.partColors.get(part.userData.partId);
+      part.userData.color = color;
+      if (color === undefined || ready.length < 2) continue;
+      part.traverse(object => {
+        if (!object.isMesh) return;
+        for (const material of [object.material].flat()) {
+          if (material.color && !material.map && !material.vertexColors) material.color.setHex(color);
+        }
+      });
+    }
     this.setHidden(this.hidden);
     this.setSection(this.section);
     if (!keepView) this.fit();
@@ -169,6 +218,9 @@ export class Viewport {
     const horizontal = vertical * ratio;
     Object.assign(this.camera, { left: -horizontal, right: horizontal, top: vertical, bottom: -vertical });
     this.camera.updateProjectionMatrix();
+    for (const layer of [this.paintMarks, this.paintPreview]) {
+      if (layer) updatePaintLayer(layer, this.camera, height, this.plane ?? null, id => this.parts.get(id)?.visible);
+    }
     this.renderer.render(this.scene, this.camera);
     this.drawAnnotations();
   }
@@ -201,7 +253,10 @@ export class Viewport {
   }
 
   clearCaps() {
-    this.caps.children.forEach(cap => cap.geometry.dispose());
+    this.caps.children.forEach(cap => {
+      cap.geometry.dispose();
+      cap.material.dispose();
+    });
     this.caps.clear();
   }
 
@@ -220,7 +275,9 @@ export class Viewport {
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(section.positions, 3));
         geometry.setAttribute('uv', new THREE.Float32BufferAttribute(section.uv, 2));
         this.cutMaterial ??= cutMaterial();
-        const cap = new THREE.Mesh(geometry, this.cutMaterial);
+        const material = this.cutMaterial.clone();
+        material.color.setHex(this.partColors.get(id) ?? 0x8bd4c2);
+        const cap = new THREE.Mesh(geometry, material);
         cap.userData.partId = id;
         cap.visible = part.visible;
         this.caps.add(cap);
@@ -283,18 +340,62 @@ export class Viewport {
         instance = instance.parent;
       }
       if (!visible || !instance.userData.partId) continue;
-      const normal = hit.normal ?? hit.face?.normal;
-      const localNormal = normal?.clone().applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld))
-        .applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(instance.matrixWorld.clone().invert()));
-      return { partId: instance.userData.partId, point: instance.worldToLocal(hit.point.clone()).toArray(), world: hit.point.toArray(), normal: localNormal?.toArray() };
+      const toLocalNormal = new THREE.Matrix3().getNormalMatrix(instance.matrixWorld.clone().invert().multiply(hit.object.matrixWorld));
+      const normal = (hit.normal ?? hit.face?.normal)?.clone().applyNormalMatrix(toLocalNormal).toArray();
+      const faceNormal = hit.face?.normal.clone().applyNormalMatrix(toLocalNormal).toArray();
+      return { partId: instance.userData.partId, point: instance.worldToLocal(hit.point.clone()).toArray(), world: hit.point.toArray(), normal, faceNormal };
     }
   }
 
-  setRegionMode(active) {
-    this.regionMode = active;
-    this.parent.classList.toggle('drawing-region', active);
+  setDragMode(mode) {
+    this.dragMode = mode;
+    this.parent.classList.toggle('drawing-region', Boolean(mode));
     this.drag = undefined;
-    this.drawAnnotations();
+    disposePaintLayer(this.paintPreview);
+    this.paintPreview = undefined;
+    if (this.paintMarks) this.paintMarks.visible = true;
+    this.render();
+  }
+
+  extendBrush(cursor, first = false) {
+    const { drag } = this;
+    const distance = Math.hypot((cursor[0] - drag.end[0]) * this.parent.clientWidth, (cursor[1] - drag.end[1]) * this.parent.clientHeight);
+    if (!first && distance < 6) return;
+    const steps = Math.min(24, Math.max(1, Math.ceil(distance / 6)));
+    const seen = drag.count;
+    const hits = new Map();
+    for (let i = 1; i <= steps && drag.count < maxPaintSamples; i++) {
+      const position = cursor.map((value, axis) => THREE.MathUtils.lerp(drag.end[axis], value, i / steps));
+      if (position.some(value => value < 0 || value > 1)) continue;
+      const hit = this.pickAt(position);
+      if (!hit) continue;
+      drag.count++;
+      if (drag.mode === 'erase') {
+        if (!hits.has(hit.partId)) hits.set(hit.partId, []);
+        hits.get(hit.partId).push(new THREE.Vector3(...hit.world));
+        continue;
+      }
+      let part = drag.stroke.parts.find(item => item.partId === hit.partId);
+      if (!part) {
+        part = { partId: hit.partId, points: [] };
+        drag.stroke.parts.push(part);
+      }
+      part.points.push(hit.point);
+    }
+    drag.end = cursor;
+    if (drag.count === seen) return;
+    if (drag.mode === 'erase') {
+      const marks = erasePaint(drag.marks, hits, drag.radius, this.parts, this.plane, drag.direction);
+      if (marks === drag.marks) return;
+      drag.marks = marks;
+      if (this.paintMarks) this.paintMarks.visible = false;
+    }
+    const previous = this.paintPreview;
+    previous?.removeFromParent();
+    this.paintPreview = paintLayer(drag.stroke ? [drag.stroke] : drag.marks, this.parts);
+    this.scene.add(this.paintPreview);
+    this.render();
+    disposePaintLayer(previous);
   }
 
   pickRegion(start, end) {
@@ -321,9 +422,15 @@ export class Viewport {
   }
 
   setAnnotations(target, measurement, start) {
+    const changed = target !== this.annotationTarget;
     this.annotationTarget = target;
-    this.ruler = measurement ?? (start ? { a: start } : undefined);
-    this.drawAnnotations();
+    this.ruler = measurement ?? (start ? { a: start.world } : undefined);
+    if (changed) {
+      disposePaintLayer(this.paintMarks);
+      this.paintMarks = paintLayer(targetMarks(target), this.parts);
+      this.scene.add(this.paintMarks);
+      this.render();
+    } else this.drawAnnotations();
   }
 
   drawAnnotations() {
@@ -348,14 +455,16 @@ export class Viewport {
         : undefined;
       const regionBack = region && (region[1][0] - region[0][0]) * (region[3][1] - region[0][1])
         < (region[1][1] - region[0][1]) * (region[3][0] - region[0][0]);
-      drawMark(ctx, { point: pin && toPixel(pin), region, regionBack, label: marks.length > 1 ? index + 1 : undefined });
+      const labelPin = mark.kind === 'paint' && marks.length > 1 && mark.parts
+        .map(({ partId, points }) => this.projectPin({ kind: 'point', partId, point: points[0] })).find(Boolean);
+      drawMark(ctx, { point: pin && toPixel(pin), region, regionBack, labelAt: labelPin && toPixel(labelPin), label: marks.length > 1 ? index + 1 : undefined });
     });
     const { a, b } = this.ruler ?? {};
     const ruler = a && {
       a: project(new THREE.Vector3(...a)), b: b && project(new THREE.Vector3(...b)),
       text: b && dimensionLabel(Math.hypot(...a.map((value, i) => value - b[i])))
     };
-    drawMarkup(ctx, { ruler, drag: this.drag && corners(this.drag.start, this.drag.end).map(toPixel) });
+    drawMarkup(ctx, { ruler, drag: this.drag?.mode === 'region' && corners(this.drag.start, this.drag.end).map(toPixel) });
   }
 
   capture() {
@@ -404,6 +513,8 @@ export class Viewport {
     this.controls.dispose();
     cancelAnimationFrame(this.capFrame);
     this.clearCaps();
+    disposePaintLayer(this.paintMarks);
+    disposePaintLayer(this.paintPreview);
     this.cutMaterial?.map.dispose();
     this.cutMaterial?.dispose();
     this.parts.forEach(disposePart);
