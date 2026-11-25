@@ -1,9 +1,9 @@
 import { Viewport } from './viewport.mjs';
-import { dimensionLabel as mm } from './markup.mjs';
+import { commentContext, dimensionLabel as mm, meshDistance } from './markup.mjs';
 import { commentCard, sentRound } from './feedback-list.mjs';
 import { addIcon } from './icons.mjs';
 import { annotation, maxCommentMarks, targetMarks } from '../core/review.mjs';
-import { renderPartList } from './parts.mjs';
+import { partChanges, renderPartList } from './parts.mjs';
 
 const $ = id => document.getElementById(id);
 const projectId = location.pathname.split('/')[2];
@@ -21,6 +21,11 @@ let statusTimeout;
 const markHistory = [];
 const expandedPartGroups = new Set();
 const storageKey = `stljam:view:${projectId}`;
+const pinnedKey = `stljam:pinned:${projectId}`;
+let pinnedParts = (projectId && readPinnedParts()) || new Set();
+let partUndo = [];
+let partRedo = [];
+let beforeChangedView;
 let saveTimer;
 
 function localView(key, value) {
@@ -32,12 +37,65 @@ function localView(key, value) {
   }
 }
 
+function readPinnedParts() {
+  const saved = localView(pinnedKey);
+  if (Array.isArray(saved)) return new Set(saved.filter(id => typeof id === 'string'));
+}
+
+function setupPartsResize() {
+  const grip = $('parts-resize');
+  const panel = grip.parentElement;
+  const feedback = document.querySelector('.feedback');
+  const key = 'stljam:parts-width';
+  const saved = localView(key);
+  const min = 150;
+  const max = 460;
+  let drag;
+
+  function maxWidth() {
+    const room = innerWidth > 900 ? innerWidth - feedback.getBoundingClientRect().width - 320 : Infinity;
+    return Math.floor(Math.min(max, innerWidth * .42, room));
+  }
+  function updateAria() {
+    grip.setAttribute('aria-valuenow', String(Math.round(panel.getBoundingClientRect().width)));
+    grip.setAttribute('aria-valuemax', String(maxWidth()));
+  }
+  function resize(width) {
+    const next = Math.round(Math.max(min, Math.min(maxWidth(), width)));
+    panel.parentElement.style.setProperty('--parts-width', `${next}px`);
+    updateAria();
+    return next;
+  }
+  if (typeof saved === 'number' && saved >= min && saved <= max) panel.parentElement.style.setProperty('--parts-width', `${saved}px`);
+  grip.setAttribute('aria-valuemin', String(min));
+  new ResizeObserver(updateAria).observe(panel);
+
+  grip.addEventListener('pointerdown', event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    drag = { id: event.pointerId, x: event.clientX, width: panel.getBoundingClientRect().width };
+    grip.setPointerCapture(event.pointerId);
+  });
+  grip.addEventListener('pointermove', event => {
+    if (event.pointerId === drag?.id) drag.next = resize(drag.width + event.clientX - drag.x);
+  });
+  grip.addEventListener('lostpointercapture', () => {
+    if (drag?.next !== undefined) localView(key, drag.next);
+    drag = undefined;
+  });
+  grip.addEventListener('keydown', event => {
+    const step = { ArrowLeft: -16, ArrowRight: 16, Home: -max, End: max }[event.key];
+    if (step === undefined) return;
+    event.preventDefault();
+    localView(key, resize(panel.getBoundingClientRect().width + step));
+  });
+}
+
 function saveWorkspace() {
   clearTimeout(saveTimer);
   if (!active || modelLoading) return;
   localView(storageKey, { active, followLatest });
   localView(`${storageKey}:${active}`, {
-    view: viewer.view(), selected, selectedComment, target, measurement,
+    view: beforeChangedView ?? viewer.view(), selected, selectedComment, target, measurement,
     text: $('comment').value, revision: amendment(), comparedVersion,
     expanded: [...expandedPartGroups], preset: $('view').value, axis: $('axis').value
   });
@@ -68,7 +126,6 @@ function restoreWorkspace(saved, model) {
     viewer.restore(restored.view);
     measurement = restored.measurement;
     setTarget(restored.target);
-    displayMeasurement();
   } catch {
     // A saved view from a replaced local project may reference different geometry.
   }
@@ -111,17 +168,26 @@ function option(number, suffix = '') {
   return new Option(`v${number}${suffix}`, String(number));
 }
 
-function hasPendingMarks() { return !selectedComment && ['point', 'region', 'paint', 'group'].includes(target.kind); }
+function isMark(target) { return ['point', 'region', 'paint', 'group'].includes(target?.kind); }
+
+function hasPendingAnnotations() { return !selectedComment && Boolean(isMark(target) || measurement || rulerStart); }
 
 function editingDraft() {
-  return !reviewClosed() && Boolean($('comment').value.trim() || inlineEdit || hasPendingMarks());
+  return !reviewClosed() && Boolean($('comment').value.trim() || inlineEdit || hasPendingAnnotations());
 }
 
-function amendment() { return review?.amendments?.find(item => item.version === active)?.batch ?? null; }
+function roundDraft() { return review?.amendments?.find(item => item.version === active); }
+
+function amendment() { return roundDraft()?.batch ?? null; }
 
 function lastBatch() { return review?.batches.findLast(batch => batch.version === active); }
 
 function reviewClosed() { return Boolean(lastBatch() && !amendment()); }
+
+function resumableBatch() {
+  const batch = lastBatch();
+  if (batch && !batch.deliveredAt && !amendment() && !review.agentListening && review.comments.some(comment => comment.batch === batch.id)) return batch;
+}
 
 function draftsForVersion() {
   const revision = amendment();
@@ -130,26 +196,44 @@ function draftsForVersion() {
 
 function updateComposer() {
   const typing = Boolean($('comment').value.trim());
-  const correcting = Boolean(amendment());
+  const draft = roundDraft();
+  const correcting = draft && !draft.additional;
   const closed = reviewClosed();
   const count = draftsForVersion().length;
   if (closed && mode) setMode(undefined);
   for (const id of ['pin', 'region', 'paint', 'measure']) $(id).disabled = closed;
   $('comment-form').hidden = closed;
   $('closed-review').hidden = !closed;
+  const canResume = closed && Boolean(resumableBatch());
+  $('resume-review').hidden = !canResume;
+  $('copy-review-message').hidden = !canResume;
+  $('add-more-feedback').classList.toggle('quiet-button', canResume);
+  $('add-more-feedback').classList.toggle('accent-button', !canResume);
   $('reopen-review').disabled = commentBusy;
+  $('add-more-feedback').disabled = commentBusy;
   $('comment').readOnly = commentBusy;
-  $('review-status').textContent = closed ? `v${active} · Closed` : correcting ? `v${active} · Reopened` : (count ? `${count} ${count === 1 ? 'comment ready' : 'comments ready'}` : 'Review open');
+  $('review-status').textContent = closed ? `v${active} · Submitted` : draft ? `v${active} · ${correcting ? 'Correction draft' : 'Additional feedback'}` : (count ? `${count} ${count === 1 ? 'comment ready' : 'comments ready'}` : 'Review open');
   $('comment-label').textContent = 'New comment';
-  $('amendment-controls').hidden = !correcting;
-  $('discard-amendment').disabled = commentBusy || Boolean(inlineEdit);
-  $('add-comment').disabled = commentBusy || !typing;
+  $('review-controls').classList.toggle('draft-controls', Boolean(draft));
+  $('discard-amendment').hidden = !draft;
+  $('discard-amendment').textContent = correcting ? 'Discard correction' : 'Discard additional draft';
+  $('discard-amendment').disabled = commentBusy;
+  const latest = review?.versions.at(-1)?.number;
+  const newer = draft && latest > active;
+  $('newer-review').hidden = !newer;
+  if (newer) {
+    $('newer-review-hint').textContent = `v${latest} is available. Your draft stays on v${active}.`;
+    $('open-latest-review').textContent = `Review v${latest}`;
+  }
+  $('open-latest-review').disabled = commentBusy || Boolean(inlineEdit);
+  $('add-comment').disabled = commentBusy || !typing || Boolean(rulerStart);
   $('submit').hidden = closed;
-  $('submit').textContent = correcting && !count ? 'Withdraw previous submission' : 'Submit review';
-  const pending = hasPendingMarks();
+  $('submit').textContent = correcting ? (count ? 'Send correction' : 'Withdraw previous submission') : draft ? 'Send additional feedback' : 'Submit review';
+  const pending = hasPendingAnnotations();
   $('submit').disabled = closed || commentBusy || typing || pending || Boolean(inlineEdit) || (!count && !correcting);
   $('send-hint').hidden = closed || (!typing && !pending);
-  $('send-hint').textContent = typing ? 'Add the comment you are writing before submitting.' : 'Add a comment for the marks or clear them before submitting.';
+  $('send-hint').textContent = rulerStart ? 'Select point B or press Esc to cancel the measurement.'
+    : typing ? 'Add the comment you are writing before submitting.' : 'Add a comment for the annotations or clear them before submitting.';
   queueWorkspaceSave();
 }
 
@@ -175,34 +259,28 @@ function currentVersion() {
   return review?.versions.find(version => version.number === active);
 }
 
-function targetLabel(mark) {
-  const partName = id => currentVersion()?.model.parts.find(part => part.id === id)?.label ?? id;
-  if (mark.kind === 'group') {
-    const ids = new Set(mark.marks.flatMap(item => item.parts ? item.parts.map(part => part.partId) : [item.partId]));
-    return `${mark.marks.length} marks · ${[...ids].map(partName).join(', ')}`;
-  }
-  if (mark.parts) return `${mark.kind === 'paint' ? 'Painted surface' : 'Region'} · ${mark.parts.map(({ partId }) => partName(partId)).join(', ')}`;
-  if (!mark.partId) return 'Entire assembly';
-  if (mark.kind === 'point') return `${mark.surface === 'section' ? 'Point on section' : 'Point'} · ${partName(mark.partId)}`;
-  return partName(mark.partId);
-}
+const partName = id => currentVersion()?.model.parts.find(part => part.id === id)?.label ?? id;
 
 function updateMarker() {
   viewer?.setAnnotations(target, measurement, rulerStart);
   $('clear-target').hidden = target.kind === 'assembly' && !measurement && !rulerStart;
-  $('undo-mark').hidden = Boolean(selectedComment) || (!hasPendingMarks() && !markHistory.length);
+  $('undo-mark').hidden = Boolean(selectedComment) || (!isMark(target) && !markHistory.length);
   $('erase-paint').disabled = mode !== 'erase' && !canErase();
   queueWorkspaceSave();
 }
 
 function setTarget(next) {
   target = next;
-  const label = targetLabel(target);
-  $('target').textContent = label;
-  $('target').title = label;
-  $('target').toggleAttribute('data-marked', target.kind !== 'assembly');
-  updateMarker();
-  updateComposer();
+  displayMeasurement();
+}
+
+function selectComment(id) {
+  selectedComment = id;
+  for (const card of $('comments').querySelectorAll('.comment-card')) {
+    const current = card.dataset.commentId === id;
+    card.classList.toggle('is-selected', current);
+    card.querySelector('.comment-open').setAttribute('aria-pressed', String(current));
+  }
 }
 
 function appendMark(mark) {
@@ -223,10 +301,13 @@ function canErase() {
 }
 
 function changeMarks(marks) {
-  if (selectedComment) markHistory.length = 0;
+  if (selectedComment) {
+    markHistory.length = 0;
+    measurement = undefined;
+  }
   markHistory.push(selectedComment ? { kind: 'assembly' } : target);
   if (markHistory.length > 24) markHistory.shift();
-  selectedComment = undefined;
+  selectComment(undefined);
   setTarget(marksTarget(marks));
 }
 
@@ -248,7 +329,7 @@ function setMode(next) {
   viewer.setDragMode(['region', 'paint', 'erase'].includes(mode) ? mode : undefined);
   const hints = { point: 'Pick a point on the part', measure: 'Measure distance: select point A', region: 'Drag a box over visible surfaces. Isolate a part first to select only that part.', paint: 'Drag to paint. Right-drag to erase. Esc to orbit.', erase: 'Drag to erase. Esc to orbit.' };
   $('tool-hint').textContent = hints[mode] ?? '';
-  updateMarker();
+  displayMeasurement();
 }
 
 function onPick(hit) {
@@ -260,6 +341,10 @@ function onPick(hit) {
   }
   if (mode === 'measure') {
     if (!rulerStart) {
+      if (selectedComment) {
+        selectComment(undefined);
+        target = { kind: 'assembly' };
+      }
       measurement = undefined;
       rulerStart = hit;
       $('tool-hint').textContent = 'Select point B';
@@ -269,7 +354,6 @@ function onPick(hit) {
     const endpoint = ({ partId, point, faceNormal, normal, surface }) => ({ partId, point, normal: faceNormal ?? normal, surface: surface ?? 'mesh' });
     measurement = { a: rulerStart.world, b: hit.world, endpoints: { a: endpoint(rulerStart), b: endpoint(hit) } };
     setMode(undefined);
-    displayMeasurement();
     return;
   }
   const marking = mode === 'point';
@@ -284,8 +368,14 @@ function onPick(hit) {
 function displayMeasurement() {
   const onSection = ['a', 'b'].filter(key => measurement?.endpoints?.[key].surface === 'section').map(key => key.toUpperCase());
   $('measurement').textContent = measurement
-    ? `Mesh distance · ${mm(Math.hypot(...measurement.a.map((n, i) => n - measurement.b[i])))}${onSection.length ? ` · ${onSection.join(' and ')} on section fill` : ''}` : '';
+    ? `Mesh distance · ${mm(meshDistance(measurement))}${onSection.length ? ` · ${onSection.join(' and ')} on section fill` : ''}` : '';
+  const label = commentContext(target, measurement, partName, rulerStart);
+  $('target').textContent = label;
+  $('target').title = label;
+  $('target').toggleAttribute('data-marked', target.kind !== 'assembly' || Boolean(measurement || rulerStart));
+  $('target').toggleAttribute('data-measurement', Boolean(measurement || rulerStart));
   updateMarker();
+  updateComposer();
 }
 
 function markSurface(mark, hint) {
@@ -303,11 +393,11 @@ function markSurface(mark, hint) {
 
 function clearTarget() {
   markHistory.length = 0;
+  selectComment(undefined);
   selected = undefined;
   measurement = undefined;
   setMode(undefined);
   setTarget({ kind: 'assembly' });
-  displayMeasurement();
   renderParts();
 }
 
@@ -317,8 +407,30 @@ function resetForm() {
   updateComposer();
 }
 
-function renderParts(reveal = false) {
+function changesFromPrevious(parts) {
+  const previous = review?.versions.findLast(version => version.number < active);
+  return { ...partChanges(parts, previous?.model.parts), since: previous?.number };
+}
+
+function selectPart(id) {
+  selected = id;
+  if (!reviewClosed() && (target.kind === 'part' || target.kind === 'assembly')) setTarget({ kind: 'part', partId: id });
+}
+
+function renderParts(reveal = false, { save = true, revealGroup, revealInTree = false } = {}) {
   const parts = currentVersion()?.model.parts ?? [];
+  const { changes, removed, since } = changesFromPrevious(parts);
+  const showChanges = $('show-changed-parts');
+  showChanges.hidden = !changes.size;
+  showChanges.textContent = beforeChangedView ? 'Restore previous view' : 'Isolate changed parts';
+  showChanges.title = beforeChangedView ? 'Restore the camera, section and part visibility' : `Show ${changes.size} changed parts since v${since}`;
+  showChanges.setAttribute('aria-expanded', String(Boolean(beforeChangedView)));
+  addIcon(showChanges, beforeChangedView ? 'undo' : 'isolate');
+  $('changed-parts').hidden = !beforeChangedView;
+  $('parts-removed').hidden = !removed;
+  $('parts-removed').textContent = removed ? `${removed} removed since v${since}` : '';
+  $('undo-parts').disabled = !partUndo.length;
+  $('redo-parts').disabled = !partRedo.length;
   const isolate = parts.some(part => part.id === selected);
   const hideParts = $('hide-parts');
   hideParts.textContent = isolate ? 'Isolate selection' : 'Hide all';
@@ -326,11 +438,13 @@ function renderParts(reveal = false) {
   addIcon(hideParts, isolate ? 'isolate' : 'eyeOff');
   hideParts.disabled = parts.every(({ id }) => viewer.hidden.has(id) === (id !== selected));
   $('show-all').hidden = !parts.some(({ id }) => viewer.hidden.has(id));
-  renderPartList($('parts'), {
-    parts, selected, hidden: viewer.hidden, colors: viewer.partColors, expanded: expandedPartGroups, reveal, button,
+  renderPartList($('parts'), $('pinned-list'), {
+    parts, changes, selected, pinned: pinnedParts, hidden: viewer.hidden, colors: viewer.partColors, expanded: expandedPartGroups,
+    revealId: reveal ? selected : undefined, revealGroup, revealInTree, button,
+    changedList: beforeChangedView ? $('changed-list') : undefined,
+    onFocusChange: focusChangedPart,
     onSelect: id => {
-      selected = id;
-      if (!reviewClosed() && (target.kind === 'part' || target.kind === 'assembly')) setTarget({ kind: 'part', partId: id });
+      selectPart(id);
       renderParts();
     },
     onVisibility: (ids, hide) => {
@@ -341,20 +455,105 @@ function renderParts(reveal = false) {
       }
       setHidden(hidden);
     },
-    onExpand: key => {
+    onExpand: (key, revealGroup) => {
+      if (revealGroup) return renderParts(false, { revealGroup: key });
       if (expandedPartGroups.has(key)) expandedPartGroups.delete(key);
       else expandedPartGroups.add(key);
       renderParts();
+    },
+    onPin: (id, pin) => {
+      pinnedParts = readPinnedParts() ?? pinnedParts;
+      const next = new Set(pinnedParts);
+      if (pin) next.add(id);
+      else next.delete(id);
+      changeParts('pins', next);
+    },
+    onReorder: ordered => {
+      pinnedParts = readPinnedParts() ?? pinnedParts;
+      const existing = ordered.filter(id => pinnedParts.has(id));
+      const visible = new Set(existing);
+      const reordered = existing.values();
+      const updated = [...pinnedParts].map(id => visible.has(id) ? reordered.next().value : id);
+      changeParts('pins', updated);
     }
   });
-  queueWorkspaceSave();
+  if (save) queueWorkspaceSave();
 }
 
 function setHidden(values) {
-  viewer.setHidden(values);
-  comparison?.setHidden(values);
-  updateMarker();
+  changeParts('visibility', values);
+}
+
+function changeParts(kind, values) {
+  if (modelLoading) return;
+  if (kind === 'visibility' && beforeChangedView) return applyPartChange(kind, values);
+  const current = kind === 'pins' ? pinnedParts : viewer.hidden;
+  const before = [...current];
+  const after = [...values];
+  if (before.length === after.length && after.every((id, index) => kind === 'pins' ? id === before[index] : current.has(id))) return;
+  partUndo.push({ kind, before, after });
+  if (partUndo.length > 40) partUndo.shift();
+  partRedo = [];
+  applyPartChange(kind, after);
+}
+
+function applyPartChange(kind, values) {
+  if (kind === 'pins') {
+    pinnedParts = new Set(values);
+    localView(pinnedKey, values);
+  } else {
+    viewer.setHidden(values);
+    comparison?.setHidden(values);
+    updateMarker();
+  }
   renderParts();
+}
+
+function stepPartHistory(from, to, state) {
+  if (modelLoading || !from.length) return;
+  const change = from.pop();
+  to.push(change);
+  if (change.kind === 'visibility') restoreChangedView();
+  applyPartChange(change.kind, change[state]);
+}
+
+function restoreChangedView() {
+  if (!beforeChangedView) return;
+  const view = beforeChangedView;
+  beforeChangedView = undefined;
+  viewer.restore(view);
+  comparison?.restore(view);
+  syncSectionControls();
+}
+
+function focusChangedPart(id) {
+  if (!beforeChangedView || modelLoading) return;
+  if (viewer.hidden.has(id)) applyPartChange('visibility', [...viewer.hidden].filter(hidden => hidden !== id));
+  selectPart(id);
+  viewer.fit(null, new Set([id]));
+  renderParts(true, { revealInTree: true });
+}
+
+function toggleChangedView() {
+  if (!active || modelLoading) return;
+  if (beforeChangedView) {
+    restoreChangedView();
+    updateMarker();
+    renderParts(Boolean(selected), { revealInTree: true });
+    return;
+  }
+  const { parts } = currentVersion().model;
+  const { changes } = changesFromPrevious(parts);
+  if (!changes.size) return;
+  beforeChangedView = viewer.view();
+  applySection(undefined);
+  applyPartChange('visibility', parts.filter(part => !changes.has(part.id)).map(part => part.id));
+  viewer.fit(null);
+}
+
+function discardPartHistory(kind) {
+  partUndo = partUndo.filter(change => change.kind !== kind);
+  partRedo = partRedo.filter(change => change.kind !== kind);
 }
 
 function syncSectionControls() {
@@ -417,21 +616,20 @@ function renderFeedback() {
   const outcomes = new Map(review.versions.flatMap(item => item.outcomes.map(outcome => [outcome.commentId, { ...outcome, version: item.number }])));
   $('version-note').textContent = version.note;
   $('version-note').hidden = !version.note;
-  $('agent-status').hidden = !review.agentListening;
+  const latest = review.versions.at(-1).number;
+  const working = review.batches.some(batch => batch.workingOn === latest + 1);
+  const agentStatus = working ? `Agent started work on v${latest + 1}` : review.agentListening ? 'Agent listening' : batches[0]?.deliveredAt ? 'Agent received feedback' : '';
+  $('agent-status').textContent = agentStatus;
+  $('agent-status').hidden = !agentStatus;
   const editor = document.activeElement?.classList.contains('comment-edit') ? document.activeElement : undefined;
   const scroll = $('review-stream').scrollTop;
   const renderCard = comment => commentCard(comment, {
-    label: targetLabel(comment.target), outcome: outcomes.get(comment.id), selected: selectedComment === comment.id,
+    label: commentContext(comment.target, comment.measurement, partName), outcome: outcomes.get(comment.id), selected: selectedComment === comment.id,
     editor: inlineEdit?.id === comment.id ? inlineEdit : undefined, button,
     onSelect: () => {
       if (editingDraft() || commentBusy) throw new Error('Add or clear the current comment before opening a different annotation.');
-      selectedComment = comment.id;
+      selectComment(comment.id);
       showComment(comment);
-      for (const card of $('comments').querySelectorAll('.comment-card')) {
-        const current = card.dataset.commentId === selectedComment;
-        card.classList.toggle('is-selected', current);
-        card.querySelector('.comment-open').setAttribute('aria-pressed', String(current));
-      }
     },
     onEdit: startInlineEdit, onDelete: deleteDraft,
     onSave: () => finishInlineEdit(comment),
@@ -487,14 +685,28 @@ async function deleteDraft(comment) {
   });
 }
 
-async function reopenRound(batch) {
+async function reopenRound(batch, additional = false) {
   if (!batch || !reviewClosed()) return;
   await writeComment(async () => {
-    await api(`${endpoint}/amendments/${batch.id}`, {}, 'POST');
+    await api(`${endpoint}/amendments/${batch.id}`, { additional }, 'POST');
     resetForm();
     $('review-stream').scrollTop = 0;
     await loadReview();
   });
+}
+
+function confirmCorrection(version, latest, withdrawing) {
+  const dialog = $('confirm-correction');
+  const newer = latest > version;
+  $('correction-hint').textContent = newer
+    ? `v${latest} is available. This ${withdrawing ? 'withdrawal' : 'correction'} updates the feedback for v${version}. You can keep the draft and review v${latest} first.`
+    : `The agent already received the original feedback. It may have started work before this ${withdrawing ? 'withdrawal' : 'correction'}.`;
+  $('review-newer').hidden = !newer;
+  $('review-newer').textContent = `Review v${latest}`;
+  $('send-correction').textContent = `${withdrawing ? 'Withdraw feedback on' : 'Send correction for'} v${version}`;
+  dialog.returnValue = 'cancel';
+  dialog.showModal();
+  return new Promise(resolve => dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true }));
 }
 
 async function copyRound(batch) {
@@ -504,15 +716,16 @@ async function copyRound(batch) {
 }
 
 function showComment(comment) {
+  restoreChangedView();
+  discardPartHistory('visibility');
   markHistory.length = 0;
   setMode(undefined);
   viewer.restore(comment.view);
   comparison?.restore(viewer.view());
   selected = comment.target.partId;
-  setTarget(comment.target);
   measurement = comment.measurement;
+  setTarget(comment.target);
   syncSectionControls();
-  displayMeasurement();
   renderParts(true);
 }
 
@@ -520,12 +733,18 @@ async function openVersion(number) {
   const item = review.versions.find(version => version.number === number);
   if (!item) return;
   saveWorkspace();
+  restoreChangedView();
   const saved = localView(`${storageKey}:${number}`);
   const token = ++activeRequest;
   modelLoading = true;
   try {
     if (!await viewer.load(item.model, Boolean(active)) || token !== activeRequest) return;
+    if (active !== number) {
+      partUndo = [];
+      partRedo = [];
+    }
     active = number;
+    pinnedParts = readPinnedParts() ?? pinnedParts;
     inlineEdit = selectedComment = undefined;
     resetForm();
     restoreWorkspace(saved, item.model);
@@ -563,15 +782,15 @@ async function loadReview() {
   if (!active) {
     const last = localView(storageKey);
     const draft = last && localView(`${storageKey}:${last.active}`);
-    const keepDraft = draft && (draft.text || (!draft.selectedComment && ['point', 'region', 'paint', 'group'].includes(draft.target?.kind)));
+    const keepDraft = review.amendments?.some(item => item.version === last?.active) || (draft && (draft.text || (!draft.selectedComment && (isMark(draft.target) || draft.measurement))));
     const number = (last?.followLatest === false || keepDraft) && review.versions.some(version => version.number === last.active) ? last.active : latest;
     followLatest = last?.followLatest !== false || number === latest;
     await openVersion(number);
-  } else if (followLatest && active !== latest && !editingDraft() && !commentBusy) await openVersion(latest);
+  } else if (followLatest && active !== latest && !amendment() && !editingDraft() && !commentBusy) await openVersion(latest);
   else {
     versionOptions();
     renderFeedback();
-    if (followLatest && latest !== active) status(`v${latest} is available. Your draft is still on v${active}.`);
+    if (followLatest && latest !== active && !amendment() && editingDraft()) status(`v${latest} is available. Your draft is still on v${active}.`);
   }
 }
 
@@ -637,6 +856,7 @@ async function boot() {
   $('upload').hidden = false;
   if (!projectId) return showProjects();
   $('review').hidden = false;
+  setupPartsResize();
   $('versions').hidden = false;
   $('version-label').hidden = false;
   viewer = new Viewport($('viewport'), {
@@ -647,6 +867,14 @@ async function boot() {
     onErase: marks => { if (canErase()) changeMarks(marks); },
     onCamera: view => { comparison?.restore(view, true); updateMarker(); }
   });
+  window.addEventListener('storage', event => {
+    if (event.key !== pinnedKey && event.key !== null) return;
+    pinnedParts = readPinnedParts() ?? new Set();
+    discardPartHistory('pins');
+    if (active && !modelLoading) renderParts(false, { save: false });
+  });
+  $('undo-parts').addEventListener('click', () => stepPartHistory(partUndo, partRedo, 'before'));
+  $('redo-parts').addEventListener('click', () => stepPartHistory(partRedo, partUndo, 'after'));
   $('versions').addEventListener('change', safe(async event => {
     if (editingDraft() || commentBusy) {
       event.target.value = String(active);
@@ -664,6 +892,7 @@ async function boot() {
     setHidden(currentVersion().model.parts.filter(part => part.id !== selected).map(part => part.id));
   });
   $('show-all').addEventListener('click', () => setHidden([]));
+  $('show-changed-parts').addEventListener('click', toggleChangedView);
   $('view').addEventListener('change', event => { if (active) viewer.fit(event.target.value); });
   $('fit').addEventListener('click', () => { if (active) viewer.fit($('view').value); });
   $('section').addEventListener('click', () => { if (active) applySection(viewer.section ? undefined : sectionAt($('axis').value)); });
@@ -684,21 +913,32 @@ async function boot() {
   });
   $('comment').addEventListener('input', updateComposer);
   $('reopen-review').addEventListener('click', safe(() => reopenRound(lastBatch())));
+  $('add-more-feedback').addEventListener('click', safe(() => reopenRound(lastBatch(), true)));
+  $('open-latest-review').addEventListener('click', safe(async () => {
+    if (commentBusy || inlineEdit) return;
+    const latest = review.versions.at(-1).number;
+    if (latest <= active) return;
+    followLatest = true;
+    await openVersion(latest);
+  }));
   $('discard-amendment').addEventListener('click', safe(async () => {
     await writeComment(async () => {
       await api(`${endpoint}/amendments/${amendment()}`, undefined, 'DELETE');
+      inlineEdit = undefined;
       resetForm();
       await loadReview();
+      const latest = review.versions.at(-1).number;
+      if (followLatest && active < latest) await openVersion(latest);
     });
   }));
   $('comment').addEventListener('keydown', event => {
     if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
     event.preventDefault();
-    if ($('comment').value.trim()) $('comment-form').requestSubmit();
+    if (!$('add-comment').disabled) $('comment-form').requestSubmit();
   });
   $('comment-form').addEventListener('submit', safe(async event => {
     event.preventDefault();
-    if (reviewClosed() || !$('comment').value.trim()) return;
+    if (reviewClosed() || rulerStart || !$('comment').value.trim()) return;
     await writeComment(async () => {
       const saved = await api(`${endpoint}/comments`, composeComment(), 'POST');
       resetForm();
@@ -711,15 +951,37 @@ async function boot() {
   $('submit').addEventListener('click', safe(async () => {
     if ($('submit').disabled || reviewClosed()) return;
     await writeComment(async () => {
-      const revision = amendment();
-      const key = JSON.stringify([active, revision, draftsForVersion().map(({ id, text }) => [id, text])]);
+      const version = active;
+      const draft = roundDraft();
+      const revision = draft?.batch ?? null;
+      const comments = draftsForVersion();
+      const latest = review.versions.at(-1).number;
+      let confirmed = false;
+      if (draft && !draft.additional && (lastBatch()?.deliveredAt || latest > version)) {
+        const answer = await confirmCorrection(version, latest, !comments.length);
+        if (answer === 'latest') {
+          followLatest = true;
+          await openVersion(review.versions.at(-1).number);
+          return;
+        }
+        if (answer !== 'send' || revision !== amendment()) return;
+        confirmed = true;
+      }
+      const key = JSON.stringify([version, revision, comments.map(({ id, text }) => [id, text])]);
       if (pendingSubmission?.key !== key) pendingSubmission = { key, id: crypto.randomUUID() };
-      await api(`${endpoint}/submit`, { version: active, revision, requestId: pendingSubmission.id }, 'POST');
+      await api(`${endpoint}/submit`, { version, revision, requestId: pendingSubmission.id, confirmed }, 'POST');
       pendingSubmission = undefined;
       resetForm();
       $('review-stream').scrollTop = 0;
       await loadReview();
     });
+  }));
+  $('copy-review-message').addEventListener('click', safe(async () => {
+    const batch = resumableBatch();
+    if (!batch) return;
+    const reference = JSON.stringify({ projectId, batchId: batch.id });
+    await navigator.clipboard.writeText(`Please review my StlJam feedback on v${batch.version}. Use get_feedback with ${reference}.`);
+    status('Message copied');
   }));
   const events = new EventSource(`${endpoint}/events`);
   const refresh = safe(loadReview);

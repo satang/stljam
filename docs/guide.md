@@ -15,7 +15,15 @@ Start StlJam and load the example gearbox using the [quick start](../README.md#q
 
 StlJam sends the original view and, for marked or measured geometry, a close-up with feature edges and separate part colors. With an active section, the close-up looks straight at the saved plane. A close-up can help locate mating surfaces. Use the editable CAD model to verify clearances.
 
-Each new measurement gives the agent the part, local point, and local surface normal for A and B, along with the distance in assembly coordinates. An endpoint on **Section** fill is labeled as a virtual surface. Pick actual model surfaces when you want the agent to identify the corresponding CAD faces.
+For large assemblies, use the pushpin beside a part or group to add it to **Pinned**. Use its eye to show or hide the item, including the contents of a pinned group. Choose a pinned group's name to open it in the assembly tree. Click the pushpin again to remove it from **Pinned**. Pins are saved per project in the current browser and carry across versions when a part keeps its ID or a group keeps its path.
+
+Drag the dotted handle to reorder pinned parts, or focus it and press the Up or Down arrow key. StlJam saves the order with your pins. Drag the right edge of the Parts panel to resize it, or focus the divider and use the Left and Right arrow keys. The width preference applies to all projects in the current browser.
+
+An amber dot marks parts added or updated since the previous published version. **Isolate changed parts** frames the changed parts and opens a list. Click a name to frame and select that part in the assembly tree, or use its pushpin to add it to **Pinned**. **Restore previous view** restores the camera, section and visibility and keeps your selection highlighted in the tree. The Parts heading lists removals separately.
+
+Use **Undo** and **Redo** in the Parts header to reverse visibility changes, pinning, and pinned order in the current version. The pushpin sits to the left of the part name and the visibility eye sits to its right.
+
+Each new measurement shows its distance and the A and B part names in the comment composer and the saved comment. The agent also receives each endpoint's local point and surface normal. An endpoint on **Section** fill is identified in the comment context and labeled as a virtual surface for the agent. Pick actual model surfaces when you want the agent to identify the corresponding CAD faces.
 
 Use **Paint** to drag with the left mouse button or a finger across the visible surfaces you want to mark, including across parts. Right-click or right-drag to erase paint, or select **Erase** and use the same gesture as painting. **Undo last** reverses the latest stroke or erase. Press Esc to orbit again. For feedback about several locations, add more marks before writing your comment. StlJam numbers the marks in the order you add them and keeps them together. Use **Clear** to start again.
 
@@ -27,13 +35,15 @@ StlJam assigns contrasting colors to nearby parts using their positions in the a
 
 Follow [Connect an agent](../README.md#connect-an-agent) to use StlJam from Codex or Claude Code. Ask the agent to open a review from the editable CAD source, share the link, and wait for your feedback. For assemblies, exporting each part separately lets you hide or isolate it during review. See [Publish an assembly](../README.md#publish-an-assembly) for export formats and the manifest.
 
-If the review shows **Agent listening**, the submitted batch goes straight to the waiting agent. If the agent has stopped waiting, the batch stays saved. Use **Copy** on the submitted review and paste it into your agent chat to continue. The agent can then apply the requested edits in the original CAD workspace and publish a revision to the same review link.
+If the review shows **Agent listening**, the submitted batch goes straight to the waiting agent. If the agent has stopped waiting, choose **Copy message** below **Review submitted** and paste it into your agent chat. The message tells the agent which batch to retrieve. Use **Copy feedback** on a submitted round if you want its full text instead. The agent can apply the requested edits in the original CAD workspace and publish a revision to the same review link.
 
 You can also review exported STL, 3MF, or self-contained GLB files using **Load models** in the browser. The editable source stays in your CAD workspace. Measurements in StlJam are based on the exported mesh. Check precise dimensions in CAD.
 
-## Correct a submitted review
+## Correct a submission or add more feedback
 
-Use **Reopen review** to make an editable copy of the latest submission. Edit the list and choose **Submit review** to replace the prior batch, or choose **Return to previous submission** to discard your edits. If you remove every comment, **Withdraw previous submission** closes the reopened round and records that the previous feedback was withdrawn. Earlier batches remain in the review history.
+Choose **Correct submission** to edit a copy of the latest round for the selected version. **Send correction** replaces that round. **Discard correction**, next to it, cancels the draft and keeps the original submission. If you remove every comment, **Withdraw previous submission** records a withdrawal. If the agent already received the original or a newer version is available, StlJam asks you to confirm before sending the correction. When a new version arrives while you are editing, use **Review vN** to inspect it and keep the draft on the older version.
+
+Choose **Add more feedback** to open a blank draft. **Send additional feedback** adds a separate round for the geometry you reviewed. The agent can finish its current revision, then check the new notes against the latest CAD and address anything still pending. **Agent received feedback** means the agent fetched the batch. When it reports the start of a revision, StlJam shows which version it started preparing.
 
 ## Inspiration
 

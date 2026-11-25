@@ -24,13 +24,30 @@
     <div id="project-list"></div>
   </main>
   <main id="review" hidden>
-    <aside class="parts">
-      <h2>Parts</h2>
-      <div id="parts" aria-label="Assembly parts"></div>
+    <aside id="parts-panel" class="parts">
+      <div class="parts-header">
+        <h2>Parts</h2>
+        <div class="part-history" aria-label="Parts history" role="group">
+          <button type="button" id="undo-parts" class="quiet-button" data-icon="undo" aria-label="Undo parts change" title="Undo parts change" disabled></button>
+          <button type="button" id="redo-parts" class="quiet-button" data-icon="redo" aria-label="Redo parts change" title="Redo parts change" disabled></button>
+        </div>
+      </div>
+      <button type="button" id="show-changed-parts" class="accent-button" data-icon="isolate" aria-controls="changed-parts" hidden>Isolate changed parts</button>
+      <section id="changed-parts" aria-labelledby="changed-heading" hidden>
+        <h3 id="changed-heading">Changed parts</h3>
+        <div id="changed-list"></div>
+      </section>
+      <p id="parts-removed" class="secondary" hidden></p>
+      <section id="pinned-parts" aria-labelledby="pinned-heading" hidden>
+        <h3 id="pinned-heading">Pinned</h3>
+        <div id="pinned-list"></div>
+      </section>
+      <div id="parts" aria-label="Assembly parts" tabindex="-1"></div>
       <div class="part-actions">
         <button id="hide-parts" class="quiet-button" data-icon="eyeOff" disabled>Hide all</button>
         <button id="show-all" class="quiet-button" data-icon="eye" hidden>Show all</button>
       </div>
+      <div id="parts-resize" role="separator" aria-label="Parts panel width" aria-controls="parts-panel" aria-orientation="vertical" tabindex="0"></div>
     </aside>
     <section class="workspace" aria-label="3D viewer">
       <div class="toolbar tools" aria-label="Viewer tools">
@@ -70,9 +87,16 @@
         <p id="version-note" class="secondary" hidden></p>
         <div class="review-actions">
           <p id="review-status" class="secondary" aria-live="polite"></p>
-          <button type="button" id="submit" class="primary" data-icon="send" hidden>Submit review</button>
+          <div id="review-controls">
+            <button type="button" id="discard-amendment" class="quiet-button" data-icon="close" hidden>Discard correction</button>
+            <button type="button" id="submit" class="primary" data-icon="send" hidden>Submit review</button>
+          </div>
         </div>
         <p id="agent-status" aria-live="polite" hidden>Agent listening</p>
+        <div id="newer-review" hidden>
+          <p id="newer-review-hint" class="secondary" aria-live="polite"></p>
+          <button type="button" id="open-latest-review" class="accent-button">Review latest</button>
+        </div>
         <p id="send-hint" class="secondary" hidden>Add the comment you are writing before submitting.</p>
       </header>
       <div id="review-stream" tabindex="0" aria-label="Comment list">
@@ -94,15 +118,29 @@
         </form>
         <div id="closed-review" hidden>
           <strong>Review submitted</strong>
-          <p class="secondary">Waiting for the next version.</p>
-          <button type="button" id="reopen-review" class="quiet-button" data-icon="edit">Reopen review</button>
-        </div>
-        <div id="amendment-controls" class="actions" hidden>
-          <button type="button" id="discard-amendment" class="quiet-button">Return to previous submission</button>
+          <div id="resume-review" hidden>
+            <p class="secondary">Paste the message into your agent chat to resume.</p>
+            <button type="button" id="copy-review-message" class="accent-button" data-icon="copy" hidden>Copy message</button>
+          </div>
+          <div class="closed-review-actions">
+            <button type="button" id="add-more-feedback" class="accent-button" data-icon="add">Add more feedback</button>
+            <button type="button" id="reopen-review" class="quiet-button" data-icon="edit">Correct submission</button>
+          </div>
         </div>
       </section>
     </aside>
   </main>
+  <dialog id="confirm-correction" aria-labelledby="correction-heading">
+    <form method="dialog">
+      <h2 id="correction-heading">Confirm correction</h2>
+      <p id="correction-hint"></p>
+      <div class="actions">
+        <button value="cancel" autofocus>Keep editing</button>
+        <button id="review-newer" value="latest" hidden>Review latest version</button>
+        <button id="send-correction" value="send" class="primary">Send correction</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="upload-dialog">
     <form id="upload-form">
       <h2 id="upload-heading">Load models</h2>

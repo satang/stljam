@@ -73,6 +73,7 @@ export function sentRound(batch, { comments, renderCard, replacement, previous, 
   title.append(node('strong', '', label));
   if (replacement) title.append(node('small', '', 'Replaced'));
   else if (batch.replaces) title.append(node('small', '', previous ? `Revises the submission from ${dateLabel.format(new Date(previous.created))}` : 'Revision'));
+  else if (batch.additionalTo) title.append(node('small', '', 'Additional feedback'));
   head.append(title);
 
   const list = node('ol', 'round-comments');
@@ -85,7 +86,7 @@ export function sentRound(batch, { comments, renderCard, replacement, previous, 
   }
 
   const actions = node('div', 'round-actions');
-  actions.append(addIcon(button('Copy', () => onCopy(batch)), 'copy'));
+  actions.append(addIcon(button('Copy feedback', () => onCopy(batch)), 'copy'));
   item.append(head, actions, list);
   if (!comments.length) item.append(node('p', 'empty-round secondary', 'Comments withdrawn.'));
   return item;

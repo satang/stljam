@@ -17,8 +17,8 @@ flowchart LR
 
 1. `open_review` opens an existing review or publishes a baseline manifest.
 2. Each comment belongs to a specific model version. A comment may target the whole assembly, one part, a surface point, or a region. It can contain a camera, a section plane, part visibility, a mesh measurement, and a PNG capture.
-3. `wait_for_feedback` returns a submitted batch or a cursor to continue waiting. The shared service reports active listeners to the viewer. `get_feedback` retrieves saved batches at any time.
-4. Submitting a batch closes the review for that version. Reopening creates an editable copy of the latest submission. Sending that copy creates a replacement batch with an explicit `replaces` ID. Earlier batches remain retrievable, including batches whose comments were withdrawn.
+3. `wait_for_feedback` and `get_feedback` deliver current submitted batches and record receipt. The shared service reports active listeners and receipt to the viewer. `start_revision` records which batch the agent started working on and the version it is preparing.
+4. Submitting a batch closes its draft. A correction creates a replacement batch with an explicit `replaces` ID. Additional feedback creates an independent batch on the reviewed version. The review history preserves earlier submissions and withdrawals.
 5. `add_version` publishes the revised previews with the base version, an idempotency key, and optional outcomes for the original comment IDs. A new version starts with an empty review. Publishing an outdated base returns a conflict.
 
 ## Geometry and annotations

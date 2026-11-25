@@ -74,6 +74,16 @@ export class Store {
           PRIMARY KEY(project, version), FOREIGN KEY(project, version) REFERENCES versions(project, number)
         );
       `);
+      for (const [table, column, definition] of [
+        ['batches', 'additional_to', 'TEXT REFERENCES batches(id)'],
+        ['batches', 'delivered_at', 'TEXT'],
+        ['batches', 'working_on', 'INTEGER'],
+        ['amendments', 'additional', 'INTEGER NOT NULL DEFAULT 0']
+      ]) {
+        if (!this.db.prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`).get(column)) {
+          this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+        }
+      }
     });
   }
 
@@ -122,8 +132,8 @@ export class Store {
     const versions = this.db.prepare('SELECT * FROM versions WHERE project = ? ORDER BY number').all(id).map(row => ({
       number: row.number, model: decode(row.model), note: row.note, outcomes: decode(row.outcomes), created: row.created
     }));
-    return { ...project, versions, comments: this.comments(id), batches: this.db.prepare('SELECT id, version, created, replaces FROM batches WHERE project = ? ORDER BY seq').all(id),
-      amendments: this.db.prepare('SELECT version, batch FROM amendments WHERE project = ?').all(id) };
+    return { ...project, versions, comments: this.comments(id), batches: this.db.prepare('SELECT id, version, created, replaces, additional_to AS additionalTo, delivered_at AS deliveredAt, working_on AS workingOn FROM batches WHERE project = ? ORDER BY seq').all(id),
+      amendments: this.db.prepare('SELECT version, batch, additional FROM amendments WHERE project = ?').all(id) };
   }
 
   comments(id, batch) {
@@ -156,6 +166,7 @@ export class Store {
       for (const outcome of outcomes) {
         const comment = this.db.prepare('SELECT id, batch FROM comments WHERE project = ? AND id = ?').get(id, outcome.commentId);
         requireValue(comment?.batch && !handled.has(comment.id) && ['applied', 'pending', 'needs-clarification'].includes(outcome.status), 'Invalid comment outcome');
+        requireValue(!this.db.prepare('SELECT 1 FROM batches WHERE replaces = ?').get(comment.batch), 'Feedback was corrected. Read the replacement before publishing this outcome.', 409);
         handled.add(comment.id);
         if (outcome.note) textField(outcome.note, 'Outcome', 2000);
       }
@@ -204,19 +215,22 @@ export class Store {
       requireValue(!this.#lastBatch(project, version), 'This review is closed. Reopen it or wait for the next version.', 409);
       return;
     }
-    requireValue(this.db.prepare('SELECT 1 FROM amendments WHERE project = ? AND version = ? AND batch = ?').get(project, version, revision), 'This review is no longer open for editing', 409);
+    const draft = this.db.prepare('SELECT additional FROM amendments WHERE project = ? AND version = ? AND batch = ?').get(project, version, revision);
+    requireValue(draft, 'This review is no longer open for editing', 409);
+    return draft;
   }
 
-  reopen(project, batch) {
+  reopen(project, batch, additional = false) {
     return this.transaction(() => {
       const { version } = this.db.prepare('SELECT version FROM batches WHERE project = ? AND id = ?').get(project, batch) ?? {};
       requireValue(version !== undefined, 'Review not found', 404);
       requireValue(!this.db.prepare('SELECT 1 FROM batches WHERE replaces = ?').get(batch), 'This submission has already been replaced', 409);
-      const open = this.db.prepare('SELECT batch FROM amendments WHERE project = ? AND version = ?').get(project, version);
-      if (open?.batch === batch) return { version, batch };
+      const open = this.db.prepare('SELECT batch, additional FROM amendments WHERE project = ? AND version = ?').get(project, version);
+      if (open?.batch === batch && Boolean(open.additional) === additional) return { version, batch };
       requireValue(!open, 'A revision of this submission is already open', 409);
       requireValue(batch === this.#lastBatch(project, version), 'Reopen the latest submission for this version', 409);
-      this.db.prepare('INSERT INTO amendments VALUES (?, ?, ?)').run(project, version, batch);
+      this.db.prepare('INSERT INTO amendments (project, version, batch, additional) VALUES (?, ?, ?, ?)').run(project, version, batch, Number(additional));
+      if (additional) return { version, batch };
       const insert = this.db.prepare('INSERT INTO comments (id, project, version, payload, capture, created, revision) VALUES (?, ?, ?, ?, ?, ?, ?)');
       const comments = this.db.prepare('SELECT payload, capture, created FROM comments WHERE batch = ? ORDER BY created, id').all(batch);
       for (const comment of comments) insert.run(randomUUID(), project, version, comment.payload, comment.capture, comment.created, batch);
@@ -233,35 +247,65 @@ export class Store {
     });
   }
 
-  submit(project, version, comment, requestId, revision = null) {
+  submit(project, version, comment, requestId, revision = null, confirmed = false) {
     return this.transaction(() => {
       const id = requestId === undefined ? randomUUID() : identifier(requestId, 'Review ID');
-      const existing = this.db.prepare('SELECT project, version, replaces FROM batches WHERE id = ?').get(id);
+      const existing = this.db.prepare('SELECT project, version, replaces, additional_to FROM batches WHERE id = ?').get(id);
       if (existing) {
-        requireValue(existing.project === project && existing.version === version && existing.replaces === revision, 'The review ID is already in use', 409);
+        requireValue(existing.project === project && existing.version === version && (existing.replaces ?? existing.additional_to) === revision, 'The review ID is already in use', 409);
         return { id, version };
       }
-      this.#requireOpen(project, version, revision === null ? null : identifier(revision, 'Submission ID'));
+      const draft = this.#requireOpen(project, version, revision === null ? null : identifier(revision, 'Submission ID'));
+      const replaces = draft?.additional ? null : revision;
+      if (replaces && !confirmed) {
+        const received = this.db.prepare('SELECT delivered_at FROM batches WHERE id = ?').get(replaces).delivered_at;
+        const newer = this.db.prepare('SELECT 1 FROM versions WHERE project = ? AND number > ? LIMIT 1').get(project, version);
+        requireValue(!received && !newer, 'Confirm the correction because the agent received the original or a newer version is available.', 409);
+      }
       if (comment !== undefined) {
         requireValue(comment && typeof comment === 'object' && !Array.isArray(comment), 'Invalid comment');
         const commentId = comment.id === undefined ? undefined : identifier(comment.id, 'Comment ID');
         this.#writeComment(project, version, { ...comment, revision }, commentId);
       }
-      requireValue(revision || this.db.prepare('SELECT 1 FROM comments WHERE project = ? AND version = ? AND batch IS NULL AND revision IS NULL').get(project, version), 'Add at least one comment before submitting');
-      this.db.prepare('INSERT INTO batches (id, project, version, created, replaces) VALUES (?, ?, ?, ?, ?)').run(id, project, version, now(), revision);
+      requireValue(replaces || this.db.prepare('SELECT 1 FROM comments WHERE project = ? AND version = ? AND batch IS NULL AND revision IS ?').get(project, version, revision), 'Add at least one comment before submitting');
+      this.db.prepare('INSERT INTO batches (id, project, version, created, replaces, additional_to) VALUES (?, ?, ?, ?, ?, ?)').run(id, project, version, now(), replaces, draft?.additional ? revision : null);
       this.db.prepare('UPDATE comments SET batch = ? WHERE project = ? AND version = ? AND batch IS NULL AND revision IS ?').run(id, project, version, revision);
       if (revision) this.db.prepare('DELETE FROM amendments WHERE project = ? AND version = ?').run(project, version);
       return { id, version };
     });
   }
 
-  feedback(project, { after, batch } = {}) {
+  markDelivered(project, batches) {
+    return this.transaction(() => {
+      const mark = this.db.prepare('UPDATE batches SET delivered_at = ? WHERE project = ? AND id = ? AND delivered_at IS NULL');
+      const at = now();
+      return batches.reduce((count, id) => count + mark.run(at, project, id).changes, 0);
+    });
+  }
+
+  startRevision(project, batch, baseVersion) {
+    return this.transaction(() => {
+      const latest = this.db.prepare('SELECT MAX(number) AS n FROM versions WHERE project = ?').get(project).n;
+      requireValue(latest !== null && baseVersion === latest, 'Open the latest preview before starting a revision', 409);
+      const workingOn = latest + 1;
+      const result = this.db.prepare(`UPDATE batches AS b SET working_on = ? WHERE project = ? AND id = ?
+        AND delivered_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM batches WHERE replaces = b.id)`).run(workingOn, project, batch);
+      requireValue(result.changes, 'Read the current feedback before starting a revision', 409);
+      return { batchId: batch, workingOn };
+    });
+  }
+
+  feedback(project, { after, batch, current = false } = {}) {
     requireValue(this.db.prepare('SELECT 1 FROM projects WHERE id = ?').get(project), 'Project not found', 404);
     const cursor = after ? this.db.prepare('SELECT seq FROM batches WHERE project = ? AND id = ?').get(project, after) : null;
     requireValue(!after || cursor, 'Cursor not found', 404);
-    const rows = batch
-      ? this.db.prepare('SELECT id, version, created, replaces FROM batches WHERE project = ? AND id = ?').all(project, batch)
-      : this.db.prepare('SELECT id, version, created, replaces FROM batches WHERE project = ? AND seq > ? ORDER BY seq LIMIT 30').all(project, cursor?.seq ?? 0);
+    const fields = 'b.id, b.version, b.created, b.replaces, b.additional_to AS additionalTo';
+    const rows = batch ? (current
+      ? this.db.prepare(`WITH RECURSIVE chain(id) AS (SELECT ? UNION ALL SELECT batches.id FROM batches, chain WHERE batches.replaces = chain.id)
+          SELECT ${fields} FROM batches b JOIN chain ON chain.id = b.id WHERE b.project = ? ORDER BY b.seq DESC LIMIT 1`).all(batch, project)
+      : this.db.prepare(`SELECT ${fields} FROM batches b WHERE b.project = ? AND b.id = ?`).all(project, batch))
+      : this.db.prepare(`SELECT ${fields} FROM batches b WHERE b.project = ? AND b.seq > ?
+          AND (? = 0 OR NOT EXISTS (SELECT 1 FROM batches WHERE replaces = b.id)) ORDER BY b.seq LIMIT 30`).all(project, cursor?.seq ?? 0, Number(current));
     requireValue(!batch || rows.length, 'Review not found', 404);
     return rows.map(row => {
       const version = this.db.prepare('SELECT model FROM versions WHERE project = ? AND number = ?').get(project, row.version);

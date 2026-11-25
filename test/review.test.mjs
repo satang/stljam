@@ -197,7 +197,7 @@ test('revises a submission without altering its history or other drafts', async 
   const reopen = await request(base, `${path}/amendments/${first.id}`, {});
   assert.deepEqual(await request(base, `${path}/amendments/${first.id}`, {}), reopen);
   const review = await request(base, path);
-  assert.deepEqual(review.amendments, [{ version: 1, batch: first.id }]);
+  assert.deepEqual(review.amendments, [{ version: 1, batch: first.id, additional: 0 }]);
   const copies = review.comments.filter(comment => comment.revision === first.id);
   assert.equal(copies.length, 2);
   const edit = copies.find(comment => comment.text === 'Original comment');
@@ -209,7 +209,9 @@ test('revises a submission without altering its history or other drafts', async 
   });
   assert.equal((await patch(edit.id, { ...draft, revision: first.id, text: 'Edited comment' }, 'PATCH')).status, 200);
   assert.equal((await patch(remove.id, undefined, 'DELETE')).status, 200);
-  const corrected = await request(base, `${path}/submit`, { version: 1, revision: first.id, comment: { ...draft, text: 'Added comment' } });
+  const correction = { version: 1, revision: first.id, comment: { ...draft, text: 'Added comment' } };
+  await assert.rejects(request(base, `${path}/submit`, correction), /Confirm the correction/);
+  const corrected = await request(base, `${path}/submit`, { ...correction, confirmed: true });
   const [latest] = await request(base, `${path}/feedback?after=${first.id}`);
   assert.equal(latest.id, corrected.id);
   assert.equal(latest.replaces, first.id);
@@ -226,11 +228,53 @@ test('revises a submission without altering its history or other drafts', async 
   for (const comment of (await request(base, path)).comments.filter(item => !item.batch && item.revision === corrected.id)) {
     assert.equal((await patch(comment.id, undefined, 'DELETE')).status, 200);
   }
-  await request(base, `${path}/submit`, { version: 1, revision: corrected.id });
+  await request(base, `${path}/submit`, { version: 1, revision: corrected.id, confirmed: true });
   const [withdrawal] = await request(base, `${path}/feedback?after=${corrected.id}`);
   assert.equal(withdrawal.replaces, corrected.id);
   assert.deepEqual(withdrawal.comments, []);
   assert.match(withdrawal.markdown, /withdrew every comment/);
+});
+
+test('delivers current corrections and keeps additional feedback queued across versions', async t => {
+  const { root, base } = await fixture(t);
+  const { params } = await newScene(base, root);
+  const path = '/api/projects/gearbox';
+  const review = () => request(base, path);
+  const submit = body => request(base, `${path}/submit`, { version: 1, ...body });
+  const reopen = (id, additional = false) => request(base, `${path}/amendments/${id}`, { additional });
+  const first = await submit({ comment: { ...draft, text: 'First request' } });
+  await request(base, `${path}/feedback?batch=${first.id}`);
+  assert.equal((await review()).batches[0].deliveredAt, null);
+  await reopen(first.id);
+  const corrected = await submit({ revision: first.id });
+  const [active] = await request(base, `${path}/feedback?agent=1`);
+  assert.equal(active.id, corrected.id);
+  assert.ok((await review()).batches.at(-1).deliveredAt);
+  const work = await request(base, `${path}/working/${corrected.id}`, { baseVersion: 1 });
+  assert.equal(work.workingOn, 2);
+  assert.equal((await review()).batches.at(-1).workingOn, 2);
+  await reopen(corrected.id);
+  await assert.rejects(submit({ revision: corrected.id }), /Confirm the correction/);
+  const current = await submit({ revision: corrected.id, confirmed: true });
+  await assert.rejects(publish(base, { ...params, baseVersion: 1, requestId: 'stale', outcomes: [{ commentId: active.comments[0].id, status: 'applied' }] }), /Feedback was corrected/);
+  const [received] = await request(base, `${path}/feedback?agent=1&batch=${first.id}`);
+  assert.equal(received.id, current.id);
+  await reopen(current.id, true);
+  assert.deepEqual((await review()).comments.filter(comment => !comment.batch), []);
+  await assert.rejects(submit({ revision: current.id }), /Add at least one comment/);
+  const extra = { revision: current.id, requestId: 'extra', comment: { ...draft, text: 'Separate request' } };
+  const additional = await submit(extra);
+  assert.deepEqual(await submit(extra), additional);
+  const second = await publish(base, { ...params, baseVersion: 1, requestId: 'second', outcomes: [{ commentId: received.comments[0].id, status: 'applied' }] });
+  const [queued] = await request(base, `${path}/feedback?agent=1&after=${current.id}`);
+  assert.equal(queued.id, additional.id);
+  assert.equal(queued.replaces, null);
+  assert.equal(queued.additionalTo, current.id);
+  assert.equal(queued.version, 1);
+  assert.deepEqual(queued.comments.map(comment => comment.text), ['Separate request']);
+  assert.equal((await request(base, `${path}/working/${queued.id}`, { baseVersion: second.version })).workingOn, 3);
+  const third = await publish(base, { ...params, baseVersion: second.version, requestId: 'third', outcomes: [{ commentId: queued.comments[0].id, status: 'applied' }] });
+  assert.equal(third.version, 3);
 });
 
 test('negotiates MCP and delivers a review while listening', async t => {
@@ -239,7 +283,7 @@ test('negotiates MCP and delivers a review while listening', async t => {
   const rpc = (method, params, id = 1) => request(base, '/mcp', { jsonrpc: '2.0', id, method, params });
   const initialized = await rpc('initialize', { protocolVersion: '2025-06-18' });
   assert.equal(initialized.result.protocolVersion, '2025-06-18');
-  assert.equal((await rpc('tools/list')).result.tools.length, 5);
+  assert.equal((await rpc('tools/list')).result.tools.length, 6);
   const payload = response => JSON.parse(response.result.content[0].text);
   const opened = payload(await rpc('tools/call', { name: 'open_review', arguments: { projectId: 'gearbox' } }));
   assert.equal(opened.version, 1);

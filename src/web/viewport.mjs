@@ -187,9 +187,9 @@ export class Viewport {
 
   size() { return this.bounds.getSize(new THREE.Vector3()).toArray(); }
 
-  fit(direction = 'iso') {
+  fit(direction = 'iso', ids) {
     const visible = new THREE.Box3();
-    for (const part of this.parts.values()) if (part.visible) visible.expandByObject(part);
+    for (const [id, part] of this.parts) if (ids ? ids.has(id) : part.visible) visible.expandByObject(part);
     const bounds = visible.isEmpty() ? this.bounds : visible;
     const span = bounds.getSize(new THREE.Vector3());
     const radius = span.length() / 2 || 1;
@@ -198,8 +198,9 @@ export class Viewport {
     this.camera.near = Math.max(.00001, radius / 10000);
     this.camera.far = Math.max(10, radius * 100);
     this.camera.zoom = 1;
+    const angle = direction ? new THREE.Vector3(...directions[direction]) : this.camera.position.clone().sub(this.controls.target);
     this.controls.target.copy(center);
-    this.camera.position.copy(center).add(new THREE.Vector3(...directions[direction]).normalize().multiplyScalar(radius * 4));
+    this.camera.position.copy(center).add(angle.normalize().multiplyScalar(radius * 4));
     this.controls.update();
     this.render();
     this.onCamera(this.view());

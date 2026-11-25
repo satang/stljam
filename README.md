@@ -64,7 +64,7 @@ The examples use a POSIX path. In PowerShell, replace the workspace argument wit
 
 > Open my assembly in StlJam and reuse existing exports where possible. Share the review link and wait for my feedback. If the preview changes, publish the revision to the same link.
 
-When the page says **Agent listening**, submitting the review returns the batch to the waiting agent in its current turn. If it has finished waiting, the batch stays available. Use **Copy** on the submitted review and tell the agent to apply the feedback. The agent can also recover it by batch ID.
+When the page says **Agent listening**, submitting the review returns the batch to the waiting agent in its current turn. If it has finished waiting, select **Copy message** and paste it into your agent chat. The message points the agent to the exact submitted batch.
 
 ## Publish an assembly
 

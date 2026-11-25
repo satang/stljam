@@ -7,13 +7,15 @@ const schema = (properties, required = []) => ({ type: 'object', properties, req
 export const tools = [
   { name: 'list_reviews', description: 'List local 3D review projects.', inputSchema: schema({}) },
   { name: 'open_review', description: 'Get the latest review URL, version, and part list, or publish v1 from a manifest in the registered workspace.', inputSchema: schema({ projectId: string, title: string, manifestPath: string, requestId: string }, ['projectId']) },
-  { name: 'get_feedback', description: 'Read submitted feedback with original and detail images when available. Grouped marks are numbered in order within the comment. Batch IDs are safe to read again. Coordinates are in millimeters.', inputSchema: schema({ projectId: string, afterBatchId: string, batchId: string }, ['projectId']) },
+  { name: 'get_feedback', description: 'Receive current submitted feedback with original and detail images. Read with afterBatchId to check for corrections before publishing and additional rounds after publishing. A batch may reference an older preview. Coordinates are in millimeters.', inputSchema: schema({ projectId: string, afterBatchId: string, batchId: string }, ['projectId']) },
   { name: 'wait_for_feedback', description: 'Wait for a submitted review. If status is waiting, call again immediately with the returned cursor. Repeat in the same turn for up to about 10 minutes per review round.', inputSchema: schema({ projectId: string, cursor: string, seconds: { type: 'integer', minimum: 1, maximum: 20 } }, ['projectId']) },
+  { name: 'start_revision', description: 'Show that you started preparing the next version for a received feedback batch. Use the latest published baseVersion, even when the feedback refers to an older version.', inputSchema: schema({ projectId: string, batchId: string, baseVersion: { type: 'integer', minimum: 1 } }, ['projectId', 'batchId', 'baseVersion']) },
   { name: 'add_version', description: 'Publish a revised preview and record the outcome of submitted comments. In an ongoing review, share the updated link and restart wait_for_feedback in the same turn using the last feedback cursor.', inputSchema: schema({ projectId: string, baseVersion: { type: 'integer' }, manifestPath: string, requestId: string, note: string, outcomes: { type: 'array', items: schema({ commentId: string, status: { enum: ['applied', 'pending', 'needs-clarification'] }, note: string }, ['commentId', 'status']) } }, ['projectId', 'baseVersion', 'manifestPath', 'requestId']) }
 ];
 
 async function feedback(base, project, after, batch) {
   const query = new URLSearchParams();
+  query.set('agent', '1');
   if (after) query.set('after', after);
   if (batch) query.set('batch', batch);
   return request(base, `/api/projects/${project}/feedback?${query}`);
@@ -34,6 +36,10 @@ async function call(name, args, base, signal, local) {
     return publish(base, { ...args, workspace, baseVersion: name === 'open_review' ? 0 : args.baseVersion });
   }
   if (name === 'get_feedback') return feedback(base, id, args.afterBatchId, args.batchId);
+  if (name === 'start_revision') {
+    const batch = identifier(args.batchId, 'Review batch');
+    return request(base, `/api/projects/${id}/working/${batch}`, { baseVersion: args.baseVersion });
+  }
   if (name === 'wait_for_feedback') {
     if (local) return local.waitForFeedback(id, args.cursor, args.seconds);
     const query = new URLSearchParams();
@@ -84,7 +90,8 @@ export async function handleRpc(message, base, signal, local) {
     instructions: [
       'Check the current review and reuse suitable exports. Match the work and verification to the request. Edit the CAD source when the user asks for a design change. Use add_version when the published preview changes and share the same review link.',
       'In an ongoing review, share the review URL as a progress update after publishing the first version and every revised version. Immediately call wait_for_feedback in the same turn, using the last feedback cursor when available.',
-      'If wait_for_feedback returns waiting, call it again immediately with the returned cursor. Allow up to about 10 minutes of waiting for each new version, or stop sooner if the user ends the review. At the time limit, tell the user how to resume. Use get_feedback when they return. A batch with replaces supersedes the earlier batch.'
+      'If wait_for_feedback returns waiting, call it again immediately with the returned cursor. Allow up to about 10 minutes of waiting for each new version, or stop sooner if the user ends the review. At the time limit, tell the user to use Copy message to resume.',
+      'Call start_revision when starting work on a received batch. Before publishing, check get_feedback after the last cursor and reconcile any batch that replaces feedback you are applying, including withdrawals. Keep additional batches queued. Once the current preview is published, process queued additional feedback and any new submissions in the same turn. Check each mark against its original preview and work from the latest CAD. If a comment is already addressed, record its outcome. Continue waiting only after the queue is handled.'
     ].join(' ')
   });
   if (message.method === 'ping') return result({});

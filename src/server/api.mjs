@@ -49,11 +49,13 @@ export function makeServer(store) {
   }
 
   function readFeedback(project, base, options) {
-    return store.feedback(project, options).map(batch => ({ ...batch, markdown: feedbackMarkdown(batch, base) }));
+    const batches = store.feedback(project, options);
+    if (options.current && batches.length && store.markDelivered(project, batches.map(batch => batch.id))) change(project);
+    return batches.map(batch => ({ ...batch, markdown: feedbackMarkdown(batch, base) }));
   }
 
   async function waitForFeedback(project, base, cursor, seconds, signal) {
-    const pending = () => readFeedback(project, base, { after: cursor });
+    const pending = () => readFeedback(project, base, { after: cursor, current: true });
     const ready = batches => ({ status: 'feedback', batches, cursor: batches.at(-1).id });
     const existing = pending();
     if (existing.length) return ready(existing);
@@ -133,7 +135,7 @@ export function makeServer(store) {
       if (!result.repeated) change(result.id);
       return reply(res, result.repeated ? 200 : 201, { ...result, url: `${base}/review/${result.id}` });
     }
-    const route = /^\/api\/projects\/([a-zA-Z0-9_-]+)(?:\/(events|comments|submit|feedback|listen|amendments)(?:\/([a-zA-Z0-9_-]+))?)?$/.exec(pathname);
+    const route = /^\/api\/projects\/([a-zA-Z0-9_-]+)(?:\/(events|comments|submit|feedback|listen|amendments|working)(?:\/([a-zA-Z0-9_-]+))?)?$/.exec(pathname);
     if (route) {
       const [, id, action, member] = route;
       if (!action && method === 'GET') return reply(res, 200, { ...store.review(id), agentListening: listeners.has(id) });
@@ -165,18 +167,24 @@ export function makeServer(store) {
         return reply(res, 200, { removed: true });
       }
       if (action === 'submit' && method === 'POST') {
-        const { version, comment, requestId, revision } = await readJson(req);
-        const batch = store.submit(id, version, comment, requestId, revision);
+        const { version, comment, requestId, revision, confirmed } = await readJson(req);
+        const batch = store.submit(id, version, comment, requestId, revision, confirmed === true);
         change(id);
         return reply(res, 201, batch);
       }
       if (action === 'amendments' && member && (method === 'POST' || method === 'DELETE')) {
-        const result = method === 'POST' ? store.reopen(id, member) : store.discardAmendment(id, member);
+        const result = method === 'POST' ? store.reopen(id, member, (await readJson(req)).additional === true) : store.discardAmendment(id, member);
         change(id);
         return reply(res, 200, result);
       }
       if (action === 'feedback' && method === 'GET') {
-        return reply(res, 200, readFeedback(id, base, { batch: url.searchParams.get('batch'), after: url.searchParams.get('after') }));
+        return reply(res, 200, readFeedback(id, base, { batch: url.searchParams.get('batch'), after: url.searchParams.get('after'), current: url.searchParams.get('agent') === '1' }));
+      }
+      if (action === 'working' && member && method === 'POST') {
+        const { baseVersion } = await readJson(req);
+        const result = store.startRevision(id, member, baseVersion);
+        change(id);
+        return reply(res, 200, result);
       }
       if (action === 'listen' && !member && method === 'GET') {
         const signal = disconnectSignal(res);
