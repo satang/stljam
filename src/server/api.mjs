@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import pkg from '../../package.json' with { type: 'json' };
 import { feedbackMarkdown, requireValue } from '../core/review.mjs';
 import { handleRpc } from './mcp.mjs';
 
@@ -109,6 +110,7 @@ export function makeServer(store) {
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' 'sha256-${importMapHash}'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' blob: data:; object-src 'none'; base-uri 'none'`);
     if (pathname === '/api/health' && method === 'GET') return reply(res, 200, { ok: true, service: 'stljam' });
+    if (pathname === '/api/info' && method === 'GET') return reply(res, 200, { version: pkg.version, node: process.version, platform: process.platform });
     if (pathname === '/mcp' && method === 'POST') {
       const signal = disconnectSignal(res);
       const answer = await handleRpc(await readJson(req), base, signal, {

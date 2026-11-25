@@ -14,15 +14,48 @@
     <strong id="project-title"></strong>
     <div class="top-actions">
       <label for="versions" id="version-label" hidden>Version</label>
-      <select id="versions" hidden></select>
+      <select id="versions" aria-label="Version" hidden></select>
       <button id="compare" class="accent-button" data-icon="compare" aria-pressed="false" hidden>Compare</button>
       <button id="upload" class="quiet-button" data-icon="upload" hidden>Load models</button>
     </div>
+    <button type="button" id="help-open" class="quiet-button" data-icon="help" aria-haspopup="dialog" aria-controls="help-dialog">Help</button>
   </header>
   <main id="projects" hidden>
     <h1>Projects</h1>
     <div id="project-list"></div>
   </main>
+  <dialog id="help-dialog" aria-labelledby="help-heading">
+    <header class="help-heading">
+      <h2 id="help-heading">Help &amp; feedback</h2>
+      <form method="dialog"><button type="submit" class="quiet-button" data-icon="close" aria-label="Close help" autofocus></button></form>
+    </header>
+    <section class="help-section" aria-labelledby="quick-guide-heading">
+      <h3 id="quick-guide-heading">Quick guide</h3>
+      <ol>
+        <li>Choose <strong>Load models</strong> or open a review link from your agent.</li>
+        <li>Use <strong>Point</strong>, <strong>Region</strong>, <strong>Paint</strong>, or <strong>Measure</strong> to show what you mean. Add a comment to save the view.</li>
+        <li>Choose <strong>Submit review</strong> to send your comments about the model to your agent.</li>
+      </ol>
+      <a href="https://github.com/satang/stljam/blob/main/docs/guide.md" target="_blank" rel="noopener noreferrer">Read the user guide</a>
+    </section>
+    <section class="help-section" aria-labelledby="product-feedback-heading">
+      <h3 id="product-feedback-heading">Feedback about StlJam</h3>
+      <div class="help-feedback-actions">
+        <a id="report-problem" href="https://github.com/satang/stljam/issues/new" target="_blank" rel="noopener noreferrer">Report a problem</a>
+        <a id="suggest-improvement" href="https://github.com/satang/stljam/issues/new" target="_blank" rel="noopener noreferrer">Suggest an improvement</a>
+      </div>
+      <p class="secondary">These open a draft on GitHub. Published issues are public.</p>
+      <div class="help-system-info">
+        <button type="button" id="copy-system-info" class="quiet-button" data-icon="copy" disabled>Copy system info</button>
+        <output id="help-copy-status" role="status" aria-live="polite"></output>
+      </div>
+    </section>
+    <footer class="help-section help-about" aria-label="About StlJam">
+      <p><strong>StlJam</strong> <span id="help-version" class="secondary">Checking installed version…</span></p>
+      <p><a href="https://github.com/satang/stljam" target="_blank" rel="noopener noreferrer">Source code</a> · <a href="https://github.com/satang/stljam/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT license</a></p>
+      <p class="secondary">Inspired by <a href="https://github.com/moritzkremb/framejam" target="_blank" rel="noopener noreferrer">FrameJam</a>.</p>
+    </footer>
+  </dialog>
   <main id="review" hidden>
     <aside id="parts-panel" class="parts">
       <div class="parts-header">
@@ -56,6 +89,7 @@
             <select id="view" aria-label="View">
               <option value="iso">Isometric</option><option value="top">Top</option>
               <option value="front">Front</option><option value="right">Right</option>
+              <option value="custom" disabled>Custom</option>
             </select>
           </label>
           <button id="fit" data-icon="fit">Fit view</button>

@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import pkg from '../package.json' with { type: 'json' };
 import { makeServer } from '../src/server/api.mjs';
 import { publish, request } from '../src/server/client.mjs';
 import { Store } from '../src/server/store.mjs';
@@ -327,6 +328,7 @@ test('enforces loopback access and serves the browser modules', async t => {
   const { base } = await fixture(t);
   const blocked = await fetch(base + '/api/projects', { headers: { Origin: 'https://example.com' } });
   assert.equal(blocked.status, 403);
+  assert.deepEqual(await request(base, '/api/info'), { version: pkg.version, node: process.version, platform: process.platform });
   const page = await fetch(base);
   const html = await page.text();
   const importMap = html.match(/type="importmap">(.*?)<\/script>/)[1];

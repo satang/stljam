@@ -23,7 +23,8 @@ const paths = {
   delete: 'M4.5 6.5h15 M9 6.5V4h6v2.5 M6.5 6.5l.8 13h9.4l.8-13 M10 10v6 M14 10v6',
   copy: 'M8 8h11v12H8z M15.5 8V4H4v12h4',
   close: 'm6 6 12 12 M18 6 6 18',
-  check: 'm5 12 4.5 4.5L19 7'
+  check: 'm5 12 4.5 4.5L19 7',
+  help: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z M9.5 9a2.5 2.5 0 1 1 4 2c-1 .7-1.5 1.2-1.5 2.5 M12 16.5h.05'
 };
 
 const masks = new Map();

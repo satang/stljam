@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5
+
+- Pin parts and groups, reorder shortcuts, resize the Parts panel, and undo or redo visibility and pin changes.
+- Isolate and frame changed parts, jump to individual parts, and restore the previous camera, section, and visibility.
+- Separate corrections from additional feedback. Show when an agent receives a batch or starts the next revision, and offer a message to copy when feedback is waiting.
+- Show measurement distance and endpoint labels in comments. Track the actual camera direction and display **Custom** when it leaves a preset.
+- Open **Help** for a quick guide, version information, and links that prepare bug reports and suggestions in GitHub Issues.
+
 ## 0.1.4
 
 - Use **Hide all** when no part is selected, or **Isolate selection** to show only the selected part. **Show all** brings every part back.

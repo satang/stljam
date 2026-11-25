@@ -4,6 +4,7 @@ import { commentCard, sentRound } from './feedback-list.mjs';
 import { addIcon } from './icons.mjs';
 import { annotation, maxCommentMarks, targetMarks } from '../core/review.mjs';
 import { partChanges, renderPartList } from './parts.mjs';
+import { setupHelp } from './help.mjs';
 
 const $ = id => document.getElementById(id);
 const projectId = location.pathname.split('/')[2];
@@ -97,7 +98,7 @@ function saveWorkspace() {
   localView(`${storageKey}:${active}`, {
     view: beforeChangedView ?? viewer.view(), selected, selectedComment, target, measurement,
     text: $('comment').value, revision: amendment(), comparedVersion,
-    expanded: [...expandedPartGroups], preset: $('view').value, axis: $('axis').value
+    expanded: [...expandedPartGroups], axis: $('axis').value
   });
 }
 
@@ -114,7 +115,6 @@ function restoreWorkspace(saved, model) {
   const viewOnly = !selectedComment && !canCompose;
   if (model.parts.some(part => part.id === saved.selected)) selected = saved.selected;
   for (const key of Array.isArray(saved.expanded) ? saved.expanded : []) if (typeof key === 'string') expandedPartGroups.add(key);
-  if (['iso', 'top', 'front', 'right'].includes(saved.preset)) $('view').value = saved.preset;
   if (['X', 'Y', 'Z'].includes(saved.axis)) $('axis').value = saved.axis;
   if (canCompose && typeof saved.text === 'string') $('comment').value = saved.text.slice(0, 4000);
   try {
@@ -523,6 +523,7 @@ function restoreChangedView() {
   beforeChangedView = undefined;
   viewer.restore(view);
   comparison?.restore(view);
+  syncViewPreset();
   syncSectionControls();
 }
 
@@ -570,6 +571,11 @@ function syncSectionControls() {
   $('offset-label').textContent = mm(section.offset);
 }
 
+function syncViewPreset() {
+  const preset = viewer?.viewPreset();
+  if (preset && $('view').value !== preset) $('view').value = preset;
+}
+
 function applySection(section) {
   viewer.setSection(section);
   comparison?.setSection(section);
@@ -587,7 +593,7 @@ async function compare(number) {
   const version = review.versions.find(version => version.number === number);
   if (!version) return;
   $('comparison').hidden = false;
-  comparison ??= new Viewport($('comparison'), { onCamera: view => { viewer.restore(view, true); updateMarker(); } });
+  comparison ??= new Viewport($('comparison'), { onCamera: view => { viewer.restore(view, true); syncViewPreset(); updateMarker(); } });
   if (await comparison.load(version.model, true, viewer.partColors)) {
     comparedVersion = number;
     comparison.restore(viewer.view());
@@ -722,6 +728,7 @@ function showComment(comment) {
   setMode(undefined);
   viewer.restore(comment.view);
   comparison?.restore(viewer.view());
+  syncViewPreset();
   selected = comment.target.partId;
   measurement = comment.measurement;
   setTarget(comment.target);
@@ -748,6 +755,7 @@ async function openVersion(number) {
     inlineEdit = selectedComment = undefined;
     resetForm();
     restoreWorkspace(saved, item.model);
+    syncViewPreset();
     $('active-view-label').textContent = `v${number}`;
     $('versions').value = String(number);
     $('dimensions').textContent = viewer.size().map(mm).join(' × ');
@@ -778,6 +786,7 @@ function versionOptions() {
 async function loadReview() {
   review = await api(endpoint);
   $('project-title').textContent = review.title;
+  $('project-title').title = review.title;
   const latest = review.versions.at(-1).number;
   if (!active) {
     const last = localView(storageKey);
@@ -853,6 +862,7 @@ $('upload-form').addEventListener('submit', async event => {
 
 async function boot() {
   document.querySelectorAll('[data-icon]').forEach(element => addIcon(element, element.dataset.icon));
+  setupHelp(api);
   $('upload').hidden = false;
   if (!projectId) return showProjects();
   $('review').hidden = false;
@@ -865,7 +875,7 @@ async function boot() {
     onPaint: paint => markSurface(paint, 'Drag the brush over a visible surface'),
     canErase,
     onErase: marks => { if (canErase()) changeMarks(marks); },
-    onCamera: view => { comparison?.restore(view, true); updateMarker(); }
+    onCamera: view => { comparison?.restore(view, true); syncViewPreset(); updateMarker(); }
   });
   window.addEventListener('storage', event => {
     if (event.key !== pinnedKey && event.key !== null) return;
@@ -893,8 +903,8 @@ async function boot() {
   });
   $('show-all').addEventListener('click', () => setHidden([]));
   $('show-changed-parts').addEventListener('click', toggleChangedView);
-  $('view').addEventListener('change', event => { if (active) viewer.fit(event.target.value); });
-  $('fit').addEventListener('click', () => { if (active) viewer.fit($('view').value); });
+  $('view').addEventListener('change', event => { if (active && !modelLoading) viewer.fit(event.target.value === 'custom' ? null : event.target.value); });
+  $('fit').addEventListener('click', () => { if (active && !modelLoading) viewer.fit(null); });
   $('section').addEventListener('click', () => { if (active) applySection(viewer.section ? undefined : sectionAt($('axis').value)); });
   $('axis').addEventListener('change', event => applySection(sectionAt(event.target.value)));
   $('offset').addEventListener('input', event => applySection({ ...viewer.section, offset: Number(event.target.value) }));
@@ -904,7 +914,7 @@ async function boot() {
   $('paint').addEventListener('click', () => setMode(mode === 'paint' ? undefined : 'paint'));
   $('erase-paint').addEventListener('click', () => setMode(mode === 'erase' ? 'paint' : 'erase'));
   window.addEventListener('pagehide', saveWorkspace);
-  window.addEventListener('keydown', event => { if (event.key === 'Escape' && mode) setMode(undefined); });
+  window.addEventListener('keydown', event => { if (event.key === 'Escape' && mode && !document.querySelector('dialog[open]')) setMode(undefined); });
   $('measure').addEventListener('click', () => setMode(mode === 'measure' ? undefined : 'measure'));
   $('clear-target').addEventListener('click', clearTarget);
   $('undo-mark').addEventListener('click', () => {

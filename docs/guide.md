@@ -2,6 +2,8 @@
 
 StlJam helps you review a mechanical part or assembly with an AI coding agent. You can show the agent exactly where a cavity needs clearance, which wall you want to change, or what you see in a section cut. StlJam saves that context with your feedback so you can return to it when the next version is ready.
 
+Open **Help** in the header for a quick guide and the installed StlJam version. To report a problem with StlJam or suggest an improvement, use the links under **Feedback about StlJam**. They open editable drafts in GitHub Issues. **Copy system info** copies the app version, Node.js version, operating system and browser so you can include them in a report.
+
 ## Try a first review
 
 Start StlJam and load the example gearbox using the [quick start](../README.md#quick-start). The demo includes both versions, so you can try a complete review before connecting an agent.

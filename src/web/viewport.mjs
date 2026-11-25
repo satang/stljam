@@ -10,6 +10,8 @@ import { assignPartColors } from './part-colors.mjs';
 
 const axes = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
 const directions = { iso: [1, -1.3, .9], front: [0, -1, 0], right: [1, 0, 0], top: [0, -.0001, 1] };
+const presetDirections = Object.entries(directions).map(([name, coordinates]) => [name, new THREE.Vector3(...coordinates).normalize()]);
+const presetTolerance = Math.cos(THREE.MathUtils.degToRad(.25));
 const corners = (a, b) => [a, [b[0], a[1]], b, [a[0], b[1]]];
 
 function cutMaterial() {
@@ -186,6 +188,11 @@ export class Viewport {
   }
 
   size() { return this.bounds.getSize(new THREE.Vector3()).toArray(); }
+
+  viewPreset() {
+    const direction = this.camera.position.clone().sub(this.controls.target).normalize();
+    return presetDirections.find(([, preset]) => direction.dot(preset) >= presetTolerance)?.[0] ?? 'custom';
+  }
 
   fit(direction = 'iso', ids) {
     const visible = new THREE.Box3();
