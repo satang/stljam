@@ -3,7 +3,7 @@
   "version": "0.1.4",
   "description": "Local, versioned 3D design reviews for humans and coding agents",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/satang/stljam-oss.git" },
+  "repository": { "type": "git", "url": "git+https://github.com/satang/stljam.git" },
   "keywords": ["cad", "stl", "3mf", "glb", "mcp", "design-review"],
   "type": "module",
   "engines": { "node": ">=24" },

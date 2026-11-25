@@ -1,33 +1,34 @@
 # StlJam
 
-**Review 3D designs with an AI coding agent, one revision at a time.**
+**Show your AI agent exactly what to change in a 3D model.**
 
-StlJam is a local browser workspace for reviewing mechanical parts and assemblies. It gives you and an AI coding agent a shared reference for feedback that is hard to describe in chat, such as which wall should be thicker or which edge needs more clearance. Open an STL, 3MF, or self-contained GLB, inspect the geometry, and attach your comments to the view you were looking at.
+“Make this wall thicker.” Which wall? With StlJam, you can point to it on the model, add a measurement or a note, and send that exact view with your feedback. When the agent publishes a revision, open the same link and compare it with the original.
 
-![StlJam showing a sectioned gearbox demo and its review panel](docs/images/gearbox-review.png)
+StlJam runs locally in your browser and opens STL, 3MF, and GLB files. [Try the included gearbox demo](#quick-start) to mark up a model and compare two versions. The demo works without an AI agent.
+
+![StlJam showing a sectioned gearbox, marked geometry, and review comments](docs/images/gearbox-review.png)
 
 ## How it works
 
-1. **Publish a preview.** The agent exports the model from your editable CAD source and shares a local review link. You can also load models directly in the browser.
-2. **Review the geometry.** Isolate a part, cut a section, mark a point or region, paint a surface, or measure between two surfaces. Comments save the view, annotation, measurement, and a screenshot when available.
-3. **Submit one round of feedback.** Add and edit comments in the list, then use **Submit review** to send the batch to the agent and close that version.
-4. **Compare the revision.** The agent updates the editable source and publishes a new preview to the same link. Compare versions side by side and open an original comment to restore its view.
+1. **Open a model.** Load your own files or review a preview your agent exported from CAD.
+2. **Show what you mean.** Isolate a part, cut through it, mark a surface, or measure a gap. Your comment keeps the camera view and annotations.
+3. **Send feedback and compare.** Submit your notes together. A connected agent can pick them up, edit the CAD source, and publish a new preview at the same link. The earlier version and its comments stay available.
 
-Follow the [user guide](docs/guide.md) for a complete first review and an explanation of what happens after submission. The [GitHub wiki](https://github.com/satang/stljam-oss/wiki) links to the demo, agent setup, and architecture.
+See the [user guide](docs/guide.md) and the [GitHub wiki](https://github.com/satang/stljam/wiki) for more examples.
 
 ## Quick start
 
 Install [Node.js 24 or later](https://nodejs.org/), then run:
 
 ```sh
-git clone https://github.com/satang/stljam-oss.git stljam
+git clone https://github.com/satang/stljam.git stljam
 cd stljam
 npm start
 ```
 
 Open [StlJam](http://127.0.0.1:32410) and choose **Load models**. The viewer loads on your machine and the checkout has no npm runtime dependencies.
 
-To use the CLI outside the checkout, install the `.tgz` from [GitHub Releases](https://github.com/satang/stljam-oss/releases) with `npm install --global ./stljam-0.1.4.tgz`, then run `stljam serve`. Use `stljam demo` and `stljam demo --next` in place of the checkout commands below.
+To use the CLI outside the checkout, install the `.tgz` from [GitHub Releases](https://github.com/satang/stljam/releases) with `npm install --global ./stljam-0.1.4.tgz`, then run `stljam serve`. Use `stljam demo` and `stljam demo --next` in place of the checkout commands below.
 
 To try the review flow with the included synthetic gearbox, run this in a second terminal:
 
