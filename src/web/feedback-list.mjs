@@ -1,4 +1,4 @@
-const dateLabel = new Intl.DateTimeFormat('en-US', { dateStyle: 'short', timeStyle: 'short' });
+import { t, formatDate } from './i18n.mjs';
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -15,7 +15,7 @@ export function commentCard(comment, { label, outcome, selected, editor, button,
   details.append(node('small', 'comment-context', label), node('span', 'comment-text', comment.text));
   const jump = button('', () => onSelect(comment), selected);
   jump.className = 'comment-open';
-  jump.title = comment.target.kind === 'region' ? 'Show region' : 'Show comment view';
+  jump.title = comment.target.kind === 'region' ? t('Show region') : t('Show comment view');
   if (comment.capture) {
     const image = node('img', 'comment-preview');
     image.src = `/assets/${comment.capture}`;
@@ -26,8 +26,8 @@ export function commentCard(comment, { label, outcome, selected, editor, button,
   jump.append(details);
   item.append(jump);
   if (outcome) {
-    const status = { applied: 'Applied', pending: 'Pending', 'needs-clarification': 'Needs clarification' }[outcome.status];
-    item.append(node('small', 'comment-outcome', `${status} in v${outcome.version}${outcome.note ? ` · ${outcome.note}` : ''}`));
+    const status = { applied: t('Applied'), pending: t('Pending'), 'needs-clarification': t('Needs clarification') }[outcome.status];
+    item.append(node('small', 'comment-outcome', `${t('{status} in v{version}', { status, version: outcome.version })}${outcome.note ? ` · ${outcome.note}` : ''}`));
   }
   if (comment.batch) return item;
 
@@ -37,8 +37,8 @@ export function commentCard(comment, { label, outcome, selected, editor, button,
     input.value = editor.text;
     input.rows = 3;
     input.maxLength = 4000;
-    input.setAttribute('aria-label', 'Edit comment text');
-    const apply = addIcon(button('Done', onSave), 'check');
+    input.setAttribute('aria-label', t('Edit comment text'));
+    const apply = addIcon(button(t('Done'), onSave), 'check');
     apply.disabled = !editor.text.trim();
     input.addEventListener('input', () => {
       editor.text = input.value;
@@ -54,25 +54,25 @@ export function commentCard(comment, { label, outcome, selected, editor, button,
         apply.click();
       }
     });
-    actions.append(button('Cancel', onCancel), apply);
+    actions.append(button(t('Cancel'), onCancel), apply);
     item.append(input, actions);
     return item;
   }
-  const remove = addIcon(button('Delete', () => onDelete(comment)), 'delete');
+  const remove = addIcon(button(t('Delete'), () => onDelete(comment)), 'delete');
   remove.classList.add('remove-button');
-  actions.append(addIcon(button('Edit', () => onEdit(comment)), 'edit'), remove);
+  actions.append(addIcon(button(t('Edit'), () => onEdit(comment)), 'edit'), remove);
   item.append(actions);
   return item;
 }
 
 export function sentRound(batch, { comments, renderCard, replacement, previous, button, onCopy }) {
   const item = node('li', 'sent-round');
-  const label = `Submitted ${dateLabel.format(new Date(batch.created))}`;
+  const label = t('Submitted {date}', { date: formatDate(batch.created) });
   const head = node('header', 'round-header');
   const title = node('div', 'round-title');
   title.append(node('strong', '', label));
   if (replacement) title.append(node('small', '', 'Replaced'));
-  else if (batch.replaces) title.append(node('small', '', previous ? `Revises the submission from ${dateLabel.format(new Date(previous.created))}` : 'Revision'));
+  else if (batch.replaces) title.append(node('small', '', previous ? t('Revises the submission from {date}', { date: formatDate(previous.created) }) : t('Revision')));
   else if (batch.additionalTo) title.append(node('small', '', 'Additional feedback'));
   head.append(title);
 
@@ -80,15 +80,15 @@ export function sentRound(batch, { comments, renderCard, replacement, previous, 
   list.append(...comments.map(renderCard));
   if (replacement) {
     const history = node('details', 'round-history');
-    history.append(node('summary', '', `View original · ${comments.length}`), list);
+    history.append(node('summary', '', `${t('View original')} · ${comments.length}`), list);
     item.append(head, history);
     return item;
   }
 
   const actions = node('div', 'round-actions');
-  actions.append(addIcon(button('Copy feedback', () => onCopy(batch)), 'copy'));
+  actions.append(addIcon(button(t('Copy feedback'), () => onCopy(batch)), 'copy'));
   item.append(head, actions, list);
-  if (!comments.length) item.append(node('p', 'empty-round secondary', 'Comments withdrawn.'));
+  if (!comments.length) item.append(node('p', 'empty-round secondary', t('Comments withdrawn.')));
   return item;
 }
 import { addIcon } from './icons.mjs';

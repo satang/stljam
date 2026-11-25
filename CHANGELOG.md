@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6
+
+- Use StlJam in English, Spanish, Brazilian Portuguese, French, German, or Simplified Chinese. The app picks a supported browser language and saves your choice under **Help → Language**.
+- Localize interface text, accessibility labels, dates, and measurement formatting. Project names, part labels, and review comments retain their original wording.
+- Switch languages without leaving your review or clearing the current draft. Translations ship with the app and work offline.
+
 ## 0.1.5
 
 - Pin parts and groups, reorder shortcuts, resize the Parts panel, and undo or redo visibility and pin changes.

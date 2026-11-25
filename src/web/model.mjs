@@ -1,3 +1,4 @@
+import { t } from './i18n.mjs';
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ThreeMFLoader } from 'three/addons/loaders/3MFLoader.js';
@@ -12,7 +13,7 @@ let cacheSize = 0;
 async function modelBytes(hash) {
   if (modelCache.has(hash)) return modelCache.get(hash);
   const response = await fetch(`/assets/${hash}`);
-  if (!response.ok) throw new Error('Could not load model.');
+  if (!response.ok) throw new Error(t('Could not load model.'));
   const bytes = await response.arrayBuffer();
   if (cacheSize + bytes.byteLength > cacheLimit) {
     modelCache.clear();
@@ -26,11 +27,11 @@ async function modelBytes(hash) {
 }
 
 export function validateStl(buffer) {
-  if (buffer.byteLength < 15) throw new Error('Empty or invalid STL.');
+  if (buffer.byteLength < 15) throw new Error(t('Empty or invalid STL.'));
   const count = buffer.byteLength >= 84 ? new DataView(buffer).getUint32(80, true) : 0;
   const binary = count > 0 && buffer.byteLength === 84 + count * 50;
-  if (!binary && !new TextDecoder().decode(buffer.slice(0, 160)).trimStart().startsWith('solid')) throw new Error('Invalid STL.');
-  if (binary && count > 2_000_000) throw new Error('The STL exceeds two million triangles.');
+  if (!binary && !new TextDecoder().decode(buffer.slice(0, 160)).trimStart().startsWith('solid')) throw new Error(t('Invalid STL.'));
+  if (binary && count > 2_000_000) throw new Error(t('The STL exceeds two million triangles.'));
 }
 
 export function threeMFScale(buffer) {
@@ -39,7 +40,7 @@ export function threeMFScale(buffer) {
   const packageFiles = unzipSync(new Uint8Array(buffer), { filter: entry => {
     expanded += entry.originalSize;
     entries++;
-    if (expanded > 192 * 1024 * 1024 || entries > 3000) throw new Error('The 3MF archive exceeds the import size limit.');
+    if (expanded > 192 * 1024 * 1024 || entries > 3000) throw new Error(t('The 3MF archive exceeds the import size limit.'));
     return entry.name.toLowerCase().endsWith('.model') || entry.name === '_rels/.rels';
   } });
   const parser = new DOMParser();
@@ -49,11 +50,11 @@ export function threeMFScale(buffer) {
     .find(relation => relation.getAttribute('Type')?.endsWith('/3dmodel'));
   const modelPath = rootRelation?.getAttribute('Target')?.replace(/^\//, '');
   const model = packageFiles[modelPath] ?? Object.entries(packageFiles).find(([name]) => name.toLowerCase().endsWith('.model'))?.[1];
-  if (!model) throw new Error('The 3MF contains no geometry.');
+  if (!model) throw new Error(t('The 3MF contains no geometry.'));
   const xml = parser.parseFromString(strFromU8(model), 'application/xml');
   const unit = xml.documentElement.getAttribute('unit') ?? 'millimeter';
   const values = { micron: 'um', millimeter: 'mm', centimeter: 'cm', meter: 'm', inch: 'in', foot: 'ft' };
-  if (!values[unit]) throw new Error('Unknown 3MF units.');
+  if (!values[unit]) throw new Error(t('Unknown 3MF units.'));
   return unitToMillimeters[values[unit]];
 }
 
@@ -64,7 +65,7 @@ export async function loadPart(part) {
   if (part.format === 'stl') {
     validateStl(buffer);
     const geometry = new STLLoader().parse(buffer);
-    if (!geometry.attributes.position?.count) throw new Error('The STL contains no triangles.');
+    if (!geometry.attributes.position?.count) throw new Error(t('The STL contains no triangles.'));
     if (geometry.attributes.normal.array.every(value => value === 0)) geometry.computeVertexNormals();
     object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x8bd4c2, roughness: .7 }));
   } else if (part.format === '3mf') {
@@ -75,7 +76,7 @@ export async function loadPart(part) {
     const manager = new THREE.LoadingManager();
     manager.setURLModifier(url => {
       if (url.startsWith('blob:') || url.startsWith('data:')) return url;
-      throw new Error('The GLB must embed its resources.');
+      throw new Error(t('The GLB must embed its resources.'));
     });
     object = (await new GLTFLoader(manager).parseAsync(buffer, '')).scene;
   }

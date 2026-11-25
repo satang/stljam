@@ -1,3 +1,4 @@
+import { t } from './i18n.mjs';
 import { addIcon } from './icons.mjs';
 
 const pathKey = path => JSON.stringify(path);
@@ -156,7 +157,7 @@ export function renderPartList(list, pinnedList, { parts, changes, selected, pin
   const visibility = (label, ids, key) => {
     const visibleCount = ids.filter(id => !hidden.has(id)).length;
     const allVisible = visibleCount === ids.length;
-    const name = `${allVisible ? 'Hide' : 'Show'} ${label}`;
+    const name = t(allVisible ? 'Hide {name}' : 'Show {name}', { name: label });
     const element = control(button('', () => onVisibility(ids, allVisible)), key);
     element.className = 'visibility';
     element.classList.toggle('is-hidden', visibleCount === 0);
@@ -169,17 +170,17 @@ export function renderPartList(list, pinnedList, { parts, changes, selected, pin
     const isPinned = pinned.has(id);
     const pin = control(button('', () => onPin(id, !isPinned), isPinned), `${prefix}pin:${id}`);
     pin.className = 'part-pin';
-    pin.setAttribute('aria-label', `Pin ${label}`);
-    pin.title = `${isPinned ? 'Unpin' : 'Pin'} ${label}`;
+    pin.setAttribute('aria-label', t('Pin {name}', { name: label }));
+    pin.title = t(isPinned ? 'Unpin {name}' : 'Pin {name}', { name: label });
     return addIcon(pin, 'pin');
   };
   const reorderHandle = (row, id, label, color) => {
     const handle = control(document.createElement('button'), `pinned:move:${id}`);
     handle.type = 'button';
     handle.className = 'part-grip';
-    handle.setAttribute('aria-label', `Reorder ${label}`);
+    handle.setAttribute('aria-label', t('Reorder {name}', { name: label }));
     handle.setAttribute('aria-keyshortcuts', 'ArrowUp ArrowDown');
-    handle.title = 'Drag to reorder or use the arrow keys';
+    handle.title = t('Drag to reorder or use the arrow keys');
     enableReorder(handle, row, pinnedList, onReorder);
     if (color !== undefined) handle.style.setProperty('--part-color', `#${color.toString(16).padStart(6, '0')}`);
     row.append(addIcon(handle, 'grip'));
@@ -192,7 +193,8 @@ export function renderPartList(list, pinnedList, { parts, changes, selected, pin
     row.dataset.pinId = id;
     const select = control(button(label, () => onSelect(id), prefix ? undefined : selected === id), `${prefix}part:${id}`);
     select.className = 'part-select';
-    showLabel(select, label, prefix ? undefined : changes.get(id));
+    const change = changes.get(id);
+    showLabel(select, label, !prefix && change ? t(change) : undefined);
     const color = colors.get(id);
     if (color !== undefined) select.style.setProperty('--part-color', `#${color.toString(16).padStart(6, '0')}`);
     if (reorder) reorderHandle(row, id, label, color);
@@ -210,7 +212,7 @@ export function renderPartList(list, pinnedList, { parts, changes, selected, pin
     if (prefix) addIcon(expand, 'group');
     else expand.setAttribute('aria-expanded', String(expanded.has(node.key)));
     const count = prefix ? 0 : node.ids.filter(id => changes.has(id)).length;
-    showLabel(expand, node.name, count ? `${count} changed ${count === 1 ? 'part' : 'parts'}` : undefined);
+    showLabel(expand, node.name, count ? t(count === 1 ? '{count} changed part' : '{count} changed parts', { count }) : undefined);
     if (reorder) reorderHandle(head, id, node.name);
     head.append(pinButton(id, node.name, prefix), expand, visibility(node.name, node.ids, `${prefix}group-visibility:${node.key}`));
     return head;
@@ -236,7 +238,7 @@ export function renderPartList(list, pinnedList, { parts, changes, selected, pin
       row.className = 'part change-row';
       const focus = control(button(label, () => onFocusChange(id)), `changed:part:${id}`);
       focus.className = 'quiet-button change-focus';
-      focus.title = `Focus and select ${label}`;
+      focus.title = t('Focus and select {name}', { name: label });
       focus.setAttribute('aria-label', focus.title);
       row.append(pinButton(id, label, 'changed:'), focus);
       return row;

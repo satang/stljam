@@ -16,6 +16,8 @@ StlJam runs locally in your browser and opens STL, 3MF, and GLB files. [Try the 
 
 See the [user guide](docs/guide.md) and the [GitHub wiki](https://github.com/satang/stljam/wiki) for more examples.
 
+The interface is available in English, Spanish, Brazilian Portuguese, French, German, and Simplified Chinese. Change it under **Help → Language**.
+
 ## Quick start
 
 Install [Node.js 24 or later](https://nodejs.org/), then run:
@@ -28,7 +30,7 @@ npm start
 
 Open [StlJam](http://127.0.0.1:32410) and choose **Load models**. The viewer loads on your machine and the checkout has no npm runtime dependencies.
 
-To use the CLI outside the checkout, install the `.tgz` from [GitHub Releases](https://github.com/satang/stljam/releases) with `npm install --global ./stljam-0.1.5.tgz`, then run `stljam serve`. Use `stljam demo` and `stljam demo --next` in place of the checkout commands below.
+To use the CLI outside the checkout, install the `.tgz` from [GitHub Releases](https://github.com/satang/stljam/releases) with `npm install --global ./stljam-0.1.6.tgz`, then run `stljam serve`. Use `stljam demo` and `stljam demo --next` in place of the checkout commands below.
 
 To try the review flow with the included synthetic gearbox, run this in a second terminal:
 

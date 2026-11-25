@@ -10,155 +10,166 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="StlJam, projects"><span></span>StlJam</a>
+    <a class="brand" href="/" aria-label="StlJam, projects" data-i18n-aria-label="StlJam, projects"><span></span>StlJam</a>
     <strong id="project-title"></strong>
     <div class="top-actions">
-      <label for="versions" id="version-label" hidden>Version</label>
-      <select id="versions" aria-label="Version" hidden></select>
-      <button id="compare" class="accent-button" data-icon="compare" aria-pressed="false" hidden>Compare</button>
-      <button id="upload" class="quiet-button" data-icon="upload" hidden>Load models</button>
+      <label for="versions" id="version-label" hidden data-i18n="Version">Version</label>
+      <select id="versions" aria-label="Version" data-i18n-aria-label="Version" hidden></select>
+      <button id="compare" class="accent-button" data-icon="compare" aria-pressed="false" hidden data-i18n="Compare">Compare</button>
+      <button id="upload" class="quiet-button" data-icon="upload" hidden data-i18n="Load models">Load models</button>
     </div>
-    <button type="button" id="help-open" class="quiet-button" data-icon="help" aria-haspopup="dialog" aria-controls="help-dialog">Help</button>
+    <button type="button" id="help-open" class="quiet-button" data-icon="help" aria-haspopup="dialog" aria-controls="help-dialog" data-i18n="Help">Help</button>
   </header>
   <main id="projects" hidden>
-    <h1>Projects</h1>
+    <h1 data-i18n="Projects">Projects</h1>
     <div id="project-list"></div>
   </main>
   <dialog id="help-dialog" aria-labelledby="help-heading">
     <header class="help-heading">
-      <h2 id="help-heading">Help &amp; feedback</h2>
-      <form method="dialog"><button type="submit" class="quiet-button" data-icon="close" aria-label="Close help" autofocus></button></form>
+      <h2 id="help-heading" data-i18n="Help &amp; feedback">Help &amp; feedback</h2>
+      <form method="dialog"><button type="submit" class="quiet-button" data-icon="close" aria-label="Close help" data-i18n-aria-label="Close help" autofocus></button></form>
     </header>
     <section class="help-section" aria-labelledby="quick-guide-heading">
-      <h3 id="quick-guide-heading">Quick guide</h3>
+      <h3 id="quick-guide-heading" data-i18n="Quick guide">Quick guide</h3>
       <ol>
-        <li>Choose <strong>Load models</strong> or open a review link from your agent.</li>
-        <li>Use <strong>Point</strong>, <strong>Region</strong>, <strong>Paint</strong>, or <strong>Measure</strong> to show what you mean. Add a comment to save the view.</li>
-        <li>Choose <strong>Submit review</strong> to send your comments about the model to your agent.</li>
+        <li data-i18n="Choose Load models or open a review link from your agent.">Choose Load models or open a review link from your agent.</li>
+        <li data-i18n="Use Point, Region, Paint, or Measure to show what you mean. Add a comment to save the view.">Use Point, Region, Paint, or Measure to show what you mean. Add a comment to save the view.</li>
+        <li data-i18n="Choose Submit review to send your comments about the model to your agent.">Choose Submit review to send your comments about the model to your agent.</li>
       </ol>
-      <a href="https://github.com/satang/stljam/blob/main/docs/guide.md" target="_blank" rel="noopener noreferrer">Read the user guide</a>
+      <a href="https://github.com/satang/stljam/blob/main/docs/guide.md" target="_blank" rel="noopener noreferrer" data-i18n="Read the user guide">Read the user guide</a>
     </section>
     <section class="help-section" aria-labelledby="product-feedback-heading">
-      <h3 id="product-feedback-heading">Feedback about StlJam</h3>
+      <h3 id="product-feedback-heading" data-i18n="Feedback about StlJam">Feedback about StlJam</h3>
       <div class="help-feedback-actions">
-        <a id="report-problem" href="https://github.com/satang/stljam/issues/new" target="_blank" rel="noopener noreferrer">Report a problem</a>
-        <a id="suggest-improvement" href="https://github.com/satang/stljam/issues/new" target="_blank" rel="noopener noreferrer">Suggest an improvement</a>
+        <a id="report-problem" href="https://github.com/satang/stljam/issues/new" target="_blank" rel="noopener noreferrer" data-i18n="Report a problem">Report a problem</a>
+        <a id="suggest-improvement" href="https://github.com/satang/stljam/issues/new" target="_blank" rel="noopener noreferrer" data-i18n="Suggest an improvement">Suggest an improvement</a>
       </div>
-      <p class="secondary">These open a draft on GitHub. Published issues are public.</p>
+      <p class="secondary" data-i18n="These open a draft on GitHub. Published issues are public.">These open a draft on GitHub. Published issues are public.</p>
       <div class="help-system-info">
-        <button type="button" id="copy-system-info" class="quiet-button" data-icon="copy" disabled>Copy system info</button>
+        <button type="button" id="copy-system-info" class="quiet-button" data-icon="copy" disabled data-i18n="Copy system info">Copy system info</button>
         <output id="help-copy-status" role="status" aria-live="polite"></output>
       </div>
     </section>
-    <footer class="help-section help-about" aria-label="About StlJam">
-      <p><strong>StlJam</strong> <span id="help-version" class="secondary">Checking installed version…</span></p>
-      <p><a href="https://github.com/satang/stljam" target="_blank" rel="noopener noreferrer">Source code</a> · <a href="https://github.com/satang/stljam/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT license</a></p>
-      <p class="secondary">Inspired by <a href="https://github.com/moritzkremb/framejam" target="_blank" rel="noopener noreferrer">FrameJam</a>.</p>
+    <div class="help-section help-language">
+      <label for="language" data-i18n="Language">Language</label>
+      <select id="language">
+        <option value="en" lang="en">English</option>
+        <option value="es" lang="es">Español</option>
+        <option value="pt-BR" lang="pt-BR">Português (Brasil)</option>
+        <option value="fr" lang="fr">Français</option>
+        <option value="de" lang="de">Deutsch</option>
+        <option value="zh-Hans" lang="zh-Hans">简体中文</option>
+      </select>
+    </div>
+    <footer class="help-section help-about" aria-label="About StlJam" data-i18n-aria-label="About StlJam">
+      <p><strong>StlJam</strong> <span id="help-version" class="secondary" data-i18n="Checking installed version…">Checking installed version…</span></p>
+      <p><a href="https://github.com/satang/stljam" target="_blank" rel="noopener noreferrer" data-i18n="Source code">Source code</a> · <a href="https://github.com/satang/stljam/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" data-i18n="MIT license">MIT license</a></p>
+      <p class="secondary"><span data-i18n="Inspired by">Inspired by</span> <a href="https://github.com/moritzkremb/framejam" target="_blank" rel="noopener noreferrer">FrameJam</a>.</p>
     </footer>
   </dialog>
   <main id="review" hidden>
     <aside id="parts-panel" class="parts">
       <div class="parts-header">
-        <h2>Parts</h2>
-        <div class="part-history" aria-label="Parts history" role="group">
-          <button type="button" id="undo-parts" class="quiet-button" data-icon="undo" aria-label="Undo parts change" title="Undo parts change" disabled></button>
-          <button type="button" id="redo-parts" class="quiet-button" data-icon="redo" aria-label="Redo parts change" title="Redo parts change" disabled></button>
+        <h2 data-i18n="Parts">Parts</h2>
+        <div class="part-history" aria-label="Parts history" data-i18n-aria-label="Parts history" role="group">
+          <button type="button" id="undo-parts" class="quiet-button" data-icon="undo" aria-label="Undo parts change" data-i18n-aria-label="Undo parts change" title="Undo parts change" data-i18n-title="Undo parts change" disabled></button>
+          <button type="button" id="redo-parts" class="quiet-button" data-icon="redo" aria-label="Redo parts change" data-i18n-aria-label="Redo parts change" title="Redo parts change" data-i18n-title="Redo parts change" disabled></button>
         </div>
       </div>
-      <button type="button" id="show-changed-parts" class="accent-button" data-icon="isolate" aria-controls="changed-parts" hidden>Isolate changed parts</button>
+      <button type="button" id="show-changed-parts" class="accent-button" data-icon="isolate" aria-controls="changed-parts" hidden data-i18n="Isolate changed parts">Isolate changed parts</button>
       <section id="changed-parts" aria-labelledby="changed-heading" hidden>
-        <h3 id="changed-heading">Changed parts</h3>
+        <h3 id="changed-heading" data-i18n="Changed parts">Changed parts</h3>
         <div id="changed-list"></div>
       </section>
       <p id="parts-removed" class="secondary" hidden></p>
       <section id="pinned-parts" aria-labelledby="pinned-heading" hidden>
-        <h3 id="pinned-heading">Pinned</h3>
+        <h3 id="pinned-heading" data-i18n="Pinned">Pinned</h3>
         <div id="pinned-list"></div>
       </section>
-      <div id="parts" aria-label="Assembly parts" tabindex="-1"></div>
+      <div id="parts" aria-label="Assembly parts" data-i18n-aria-label="Assembly parts" tabindex="-1"></div>
       <div class="part-actions">
-        <button id="hide-parts" class="quiet-button" data-icon="eyeOff" disabled>Hide all</button>
-        <button id="show-all" class="quiet-button" data-icon="eye" hidden>Show all</button>
+        <button id="hide-parts" class="quiet-button" data-icon="eyeOff" disabled data-i18n="Hide all">Hide all</button>
+        <button id="show-all" class="quiet-button" data-icon="eye" hidden data-i18n="Show all">Show all</button>
       </div>
-      <div id="parts-resize" role="separator" aria-label="Parts panel width" aria-controls="parts-panel" aria-orientation="vertical" tabindex="0"></div>
+      <div id="parts-resize" role="separator" aria-label="Parts panel width" data-i18n-aria-label="Parts panel width" aria-controls="parts-panel" aria-orientation="vertical" tabindex="0"></div>
     </aside>
-    <section class="workspace" aria-label="3D viewer">
-      <div class="toolbar tools" aria-label="Viewer tools">
-        <div class="tool-group" role="group" aria-label="View and section">
+    <section class="workspace" aria-label="3D viewer" data-i18n-aria-label="3D viewer">
+      <div class="toolbar tools" aria-label="Viewer tools" data-i18n-aria-label="Viewer tools">
+        <div class="tool-group" role="group" aria-label="View and section" data-i18n-aria-label="View and section">
           <label class="view-picker" data-icon="cube">
-            <select id="view" aria-label="View">
-              <option value="iso">Isometric</option><option value="top">Top</option>
-              <option value="front">Front</option><option value="right">Right</option>
-              <option value="custom" disabled>Custom</option>
+            <select id="view" aria-label="View" data-i18n-aria-label="View">
+              <option value="iso" data-i18n="Isometric">Isometric</option><option value="top" data-i18n="Top">Top</option>
+              <option value="front" data-i18n="Front">Front</option><option value="right" data-i18n="Right">Right</option>
+              <option value="custom" disabled data-i18n="Custom">Custom</option>
             </select>
           </label>
-          <button id="fit" data-icon="fit">Fit view</button>
-          <button id="section" data-icon="section" aria-pressed="false">Section</button>
+          <button id="fit" data-icon="fit" data-i18n="Fit view">Fit view</button>
+          <button id="section" data-icon="section" aria-pressed="false" data-i18n="Section">Section</button>
         </div>
-        <div class="tool-group" role="group" aria-label="Annotations">
-          <button id="measure" data-icon="measure" aria-pressed="false" title="Measure the distance between two surface points">Measure</button>
-          <button id="pin" data-icon="point" aria-pressed="false">Point</button>
-          <button id="region" data-icon="region" aria-pressed="false">Region</button>
-          <button id="paint" data-icon="paint" aria-pressed="false">Paint</button>
-          <button id="erase-paint" data-icon="erase" aria-pressed="false" hidden>Erase</button>
+        <div class="tool-group" role="group" aria-label="Annotations" data-i18n-aria-label="Annotations">
+          <button id="measure" data-icon="measure" aria-pressed="false" title="Measure the distance between two surface points" data-i18n-title="Measure the distance between two surface points" data-i18n="Measure">Measure</button>
+          <button id="pin" data-icon="point" aria-pressed="false" data-i18n="Point">Point</button>
+          <button id="region" data-icon="region" aria-pressed="false" data-i18n="Region">Region</button>
+          <button id="paint" data-icon="paint" aria-pressed="false" data-i18n="Paint">Paint</button>
+          <button id="erase-paint" data-icon="erase" aria-pressed="false" hidden data-i18n="Erase">Erase</button>
         </div>
       </div>
       <div id="section-controls" class="toolbar" hidden>
-        <select id="axis" aria-label="Section axis"><option>X</option><option>Y</option><option>Z</option></select>
-        <input id="offset" type="range" aria-label="Section offset">
+        <select id="axis" aria-label="Section axis" data-i18n-aria-label="Section axis"><option>X</option><option>Y</option><option>Z</option></select>
+        <input id="offset" type="range" aria-label="Section offset" data-i18n-aria-label="Section offset">
         <output id="offset-label"></output>
-        <label><input id="flip" type="checkbox"> Flip</label>
+        <label><input id="flip" type="checkbox"> <span data-i18n="Flip">Flip</span></label>
       </div>
       <div id="viewports">
         <div class="viewport" id="viewport"><span class="view-label" id="active-view-label"></span></div>
-        <div class="viewport" id="comparison" hidden><select class="view-label" id="compare-version" aria-label="Compare with version"></select></div>
+        <div class="viewport" id="comparison" hidden><select class="view-label" id="compare-version" aria-label="Compare with version" data-i18n-aria-label="Compare with version"></select></div>
       </div>
-      <div class="view-footer"><output id="tool-hint" aria-live="polite"></output><output id="measurement"></output><output id="dimensions" title="Assembly dimensions"></output></div>
+      <div class="view-footer"><output id="tool-hint" aria-live="polite"></output><output id="measurement"></output><output id="dimensions" title="Assembly dimensions" data-i18n-title="Assembly dimensions"></output></div>
     </section>
     <aside class="feedback" aria-labelledby="feedback-heading">
       <header class="feedback-header">
-        <h2 id="feedback-heading">Comments</h2>
+        <h2 id="feedback-heading" data-i18n="Comments">Comments</h2>
         <p id="version-note" class="secondary" hidden></p>
         <div class="review-actions">
           <p id="review-status" class="secondary" aria-live="polite"></p>
           <div id="review-controls">
-            <button type="button" id="discard-amendment" class="quiet-button" data-icon="close" hidden>Discard correction</button>
-            <button type="button" id="submit" class="primary" data-icon="send" hidden>Submit review</button>
+            <button type="button" id="discard-amendment" class="quiet-button" data-icon="close" hidden data-i18n="Discard correction">Discard correction</button>
+            <button type="button" id="submit" class="primary" data-icon="send" hidden data-i18n="Submit review">Submit review</button>
           </div>
         </div>
-        <p id="agent-status" aria-live="polite" hidden>Agent listening</p>
+        <p id="agent-status" aria-live="polite" hidden data-i18n="Agent listening">Agent listening</p>
         <div id="newer-review" hidden>
           <p id="newer-review-hint" class="secondary" aria-live="polite"></p>
-          <button type="button" id="open-latest-review" class="accent-button">Review latest</button>
+          <button type="button" id="open-latest-review" class="accent-button" data-i18n="Review latest">Review latest</button>
         </div>
-        <p id="send-hint" class="secondary" hidden>Add the comment you are writing before submitting.</p>
+        <p id="send-hint" class="secondary" hidden data-i18n="Add the comment you are writing before submitting.">Add the comment you are writing before submitting.</p>
       </header>
-      <div id="review-stream" tabindex="0" aria-label="Comment list">
+      <div id="review-stream" tabindex="0" aria-label="Comment list" data-i18n-aria-label="Comment list">
         <p id="empty-comments" class="secondary" hidden></p>
         <ol id="comments"></ol>
       </div>
       <section id="compose-dock" aria-labelledby="comment-label">
         <form id="comment-form">
-          <label for="comment" id="comment-label">New comment</label>
+          <label for="comment" id="comment-label" data-i18n="New comment">New comment</label>
           <div class="compose-context">
-            <small id="target" aria-live="polite">Entire assembly</small>
-            <button type="button" id="undo-mark" class="quiet-button" title="Undo the last mark or erase" hidden>Undo last</button>
-            <button type="button" id="clear-target" class="quiet-button" data-icon="close" hidden>Clear</button>
+            <small id="target" aria-live="polite" data-i18n="Entire assembly">Entire assembly</small>
+            <button type="button" id="undo-mark" class="quiet-button" title="Undo the last mark or erase" data-i18n-title="Undo the last mark or erase" hidden data-i18n="Undo last">Undo last</button>
+            <button type="button" id="clear-target" class="quiet-button" data-icon="close" hidden data-i18n="Clear">Clear</button>
           </div>
-          <textarea id="comment" rows="3" maxlength="4000" placeholder="Write a comment…"></textarea>
+          <textarea id="comment" rows="3" maxlength="4000" placeholder="Write a comment…" data-i18n-placeholder="Write a comment…"></textarea>
           <div class="compose-actions">
-            <button type="submit" id="add-comment" class="accent-button" data-icon="add" title="Add the comment to the list (Enter)">Add comment</button>
+            <button type="submit" id="add-comment" class="accent-button" data-icon="add" title="Add the comment to the list (Enter)" data-i18n-title="Add the comment to the list (Enter)" data-i18n="Add comment">Add comment</button>
           </div>
         </form>
         <div id="closed-review" hidden>
-          <strong>Review submitted</strong>
+          <strong data-i18n="Review submitted">Review submitted</strong>
           <div id="resume-review" hidden>
-            <p class="secondary">Paste the message into your agent chat to resume.</p>
-            <button type="button" id="copy-review-message" class="accent-button" data-icon="copy" hidden>Copy message</button>
+            <p class="secondary" data-i18n="Paste the message into your agent chat to resume.">Paste the message into your agent chat to resume.</p>
+            <button type="button" id="copy-review-message" class="accent-button" data-icon="copy" hidden data-i18n="Copy message">Copy message</button>
           </div>
           <div class="closed-review-actions">
-            <button type="button" id="add-more-feedback" class="accent-button" data-icon="add">Add more feedback</button>
-            <button type="button" id="reopen-review" class="quiet-button" data-icon="edit">Correct submission</button>
+            <button type="button" id="add-more-feedback" class="accent-button" data-icon="add" data-i18n="Add more feedback">Add more feedback</button>
+            <button type="button" id="reopen-review" class="quiet-button" data-icon="edit" data-i18n="Correct submission">Correct submission</button>
           </div>
         </div>
       </section>
@@ -166,23 +177,23 @@
   </main>
   <dialog id="confirm-correction" aria-labelledby="correction-heading">
     <form method="dialog">
-      <h2 id="correction-heading">Confirm correction</h2>
+      <h2 id="correction-heading" data-i18n="Confirm correction">Confirm correction</h2>
       <p id="correction-hint"></p>
       <div class="actions">
-        <button value="cancel" autofocus>Keep editing</button>
-        <button id="review-newer" value="latest" hidden>Review latest version</button>
-        <button id="send-correction" value="send" class="primary">Send correction</button>
+        <button value="cancel" autofocus data-i18n="Keep editing">Keep editing</button>
+        <button id="review-newer" value="latest" hidden data-i18n="Review latest version">Review latest version</button>
+        <button id="send-correction" value="send" class="primary" data-i18n="Send correction">Send correction</button>
       </div>
     </form>
   </dialog>
   <dialog id="upload-dialog">
     <form id="upload-form">
-      <h2 id="upload-heading">Load models</h2>
-      <label>Title <input name="title" maxlength="130" required></label>
-      <label>STL, 3MF, or GLB files <input name="files" type="file" accept=".stl,.3mf,.glb" multiple required></label>
-      <label>STL units <select name="units"><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option><option value="in">inches</option></select></label>
-      <label id="note-label">Changes <input name="note" maxlength="4000"></label>
-      <div class="actions"><button type="submit" class="primary">Publish</button><button type="button" id="cancel-upload">Cancel</button></div>
+      <h2 id="upload-heading" data-i18n="Load models">Load models</h2>
+      <label><span data-i18n="Title">Title</span> <input name="title" maxlength="130" required></label>
+      <label><span data-i18n="STL, 3MF, or GLB files">STL, 3MF, or GLB files</span> <input name="files" type="file" accept=".stl,.3mf,.glb" multiple required></label>
+      <label><span data-i18n="STL units">STL units</span> <select name="units"><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option><option value="in">inches</option></select></label>
+      <label id="note-label"><span data-i18n="Changes">Changes</span> <input name="note" maxlength="4000"></label>
+      <div class="actions"><button type="submit" class="primary" data-i18n="Publish">Publish</button><button type="button" id="cancel-upload" data-i18n="Cancel">Cancel</button></div>
       <output id="upload-error" role="status"></output>
     </form>
   </dialog>

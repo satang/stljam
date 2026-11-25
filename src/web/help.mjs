@@ -1,3 +1,4 @@
+import { t, language, setLanguage, translatePage } from './i18n.mjs';
 const issuePage = 'https://github.com/satang/stljam/issues/new';
 
 function browserName() {
@@ -8,13 +9,27 @@ function browserName() {
   return `${names[id]} ${version}`;
 }
 
-export function setupHelp(api) {
+export function setupHelp(api, onLanguageChange) {
   const dialog = document.getElementById('help-dialog');
   const opener = document.getElementById('help-open');
   const version = document.getElementById('help-version');
   const copy = document.getElementById('copy-system-info');
   const status = document.getElementById('help-copy-status');
+  const selector = document.getElementById('language');
   let details;
+  selector.value = language;
+
+  function displayVersion() {
+    if (details) version.textContent = t('Version {version}', { version: details.version });
+  }
+
+  selector.addEventListener('change', () => {
+    if (!setLanguage(selector.value)) return;
+    translatePage();
+    displayVersion();
+    status.textContent = '';
+    onLanguageChange();
+  });
 
   function issueLink(id, title, body) {
     document.getElementById(id).href = `${issuePage}?${new URLSearchParams({ title, body })}`;
@@ -28,10 +43,10 @@ export function setupHelp(api) {
     if (details) return;
     try {
       details = await api('/api/info');
-      version.textContent = `Version ${details.version}`;
+      displayVersion();
       copy.disabled = false;
     } catch {
-      version.textContent = 'Installed version unavailable';
+      version.textContent = t('Installed version unavailable');
     }
   });
 
@@ -45,9 +60,9 @@ export function setupHelp(api) {
     ].join('\n');
     try {
       await navigator.clipboard.writeText(text);
-      status.textContent = 'System info copied.';
+      status.textContent = t('System info copied.');
     } catch {
-      status.textContent = 'Clipboard unavailable.';
+      status.textContent = t('Clipboard unavailable.');
     }
   });
 }

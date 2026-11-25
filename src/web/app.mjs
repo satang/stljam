@@ -1,3 +1,4 @@
+import { t, translatePage } from './i18n.mjs';
 import { Viewport } from './viewport.mjs';
 import { commentContext, dimensionLabel as mm, meshDistance } from './markup.mjs';
 import { commentCard, sentRound } from './feedback-list.mjs';
@@ -144,7 +145,7 @@ async function api(route, body, method = 'GET') {
     body: body === undefined ? undefined : binary ? body : JSON.stringify(body)
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error ?? 'The operation could not be completed');
+  if (!response.ok) throw new Error(t(data.error ?? 'The operation could not be completed'));
   return data;
 }
 
@@ -212,28 +213,28 @@ function updateComposer() {
   $('reopen-review').disabled = commentBusy;
   $('add-more-feedback').disabled = commentBusy;
   $('comment').readOnly = commentBusy;
-  $('review-status').textContent = closed ? `v${active} · Submitted` : draft ? `v${active} · ${correcting ? 'Correction draft' : 'Additional feedback'}` : (count ? `${count} ${count === 1 ? 'comment ready' : 'comments ready'}` : 'Review open');
-  $('comment-label').textContent = 'New comment';
+  $('review-status').textContent = closed ? `v${active} · ${t('Submitted')}` : draft ? `v${active} · ${correcting ? t('Correction draft') : t('Additional feedback')}` : (count ? t(count === 1 ? '{count} comment ready' : '{count} comments ready', { count }) : t('Review open'));
+  $('comment-label').textContent = t('New comment');
   $('review-controls').classList.toggle('draft-controls', Boolean(draft));
   $('discard-amendment').hidden = !draft;
-  $('discard-amendment').textContent = correcting ? 'Discard correction' : 'Discard additional draft';
+  $('discard-amendment').textContent = correcting ? t('Discard correction') : t('Discard additional draft');
   $('discard-amendment').disabled = commentBusy;
   const latest = review?.versions.at(-1)?.number;
   const newer = draft && latest > active;
   $('newer-review').hidden = !newer;
   if (newer) {
-    $('newer-review-hint').textContent = `v${latest} is available. Your draft stays on v${active}.`;
-    $('open-latest-review').textContent = `Review v${latest}`;
+    $('newer-review-hint').textContent = t('v{latest} is available. Your draft stays on v{active}.', { latest, active });
+    $('open-latest-review').textContent = t('Review v{version}', { version: latest });
   }
   $('open-latest-review').disabled = commentBusy || Boolean(inlineEdit);
   $('add-comment').disabled = commentBusy || !typing || Boolean(rulerStart);
   $('submit').hidden = closed;
-  $('submit').textContent = correcting ? (count ? 'Send correction' : 'Withdraw previous submission') : draft ? 'Send additional feedback' : 'Submit review';
+  $('submit').textContent = correcting ? (count ? t('Send correction') : t('Withdraw previous submission')) : draft ? t('Send additional feedback') : t('Submit review');
   const pending = hasPendingAnnotations();
   $('submit').disabled = closed || commentBusy || typing || pending || Boolean(inlineEdit) || (!count && !correcting);
   $('send-hint').hidden = closed || (!typing && !pending);
-  $('send-hint').textContent = rulerStart ? 'Select point B or press Esc to cancel the measurement.'
-    : typing ? 'Add the comment you are writing before submitting.' : 'Add a comment for the annotations or clear them before submitting.';
+  $('send-hint').textContent = rulerStart ? t('Select point B or press Esc to cancel the measurement.')
+    : typing ? t('Add the comment you are writing before submitting.') : t('Add a comment for the annotations or clear them before submitting.');
   queueWorkspaceSave();
 }
 
@@ -286,7 +287,7 @@ function selectComment(id) {
 function appendMark(mark) {
   const marks = selectedComment ? [] : targetMarks(target).filter(item => ['point', 'region', 'paint'].includes(item.kind));
   if (marks.length === maxCommentMarks) {
-    status(`Add the comment before marking more than ${maxCommentMarks} locations.`);
+    status(t('Add the comment before marking more than {count} locations.', { count: maxCommentMarks }));
     return;
   }
   changeMarks([...marks, mark]);
@@ -327,9 +328,13 @@ function setMode(next) {
   $('erase-paint').hidden = mode !== 'paint' && mode !== 'erase';
   $('viewport').classList.toggle('picking', mode === 'point' || mode === 'measure');
   viewer.setDragMode(['region', 'paint', 'erase'].includes(mode) ? mode : undefined);
-  const hints = { point: 'Pick a point on the part', measure: 'Measure distance: select point A', region: 'Drag a box over visible surfaces. Isolate a part first to select only that part.', paint: 'Drag to paint. Right-drag to erase. Esc to orbit.', erase: 'Drag to erase. Esc to orbit.' };
-  $('tool-hint').textContent = hints[mode] ?? '';
+  syncToolHint();
   displayMeasurement();
+}
+
+function syncToolHint() {
+  const hints = { point: t('Pick a point on the part'), measure: t('Measure distance: select point A'), region: t('Drag a box over visible surfaces. Isolate a part first to select only that part.'), paint: t('Drag to paint. Right-drag to erase. Esc to orbit.'), erase: t('Drag to erase. Esc to orbit.') };
+  $('tool-hint').textContent = rulerStart ? t('Select point B') : hints[mode] ?? '';
 }
 
 function onPick(hit) {
@@ -347,7 +352,7 @@ function onPick(hit) {
       }
       measurement = undefined;
       rulerStart = hit;
-      $('tool-hint').textContent = 'Select point B';
+      $('tool-hint').textContent = t('Select point B');
       displayMeasurement();
       return;
     }
@@ -368,7 +373,7 @@ function onPick(hit) {
 function displayMeasurement() {
   const onSection = ['a', 'b'].filter(key => measurement?.endpoints?.[key].surface === 'section').map(key => key.toUpperCase());
   $('measurement').textContent = measurement
-    ? `Mesh distance · ${mm(meshDistance(measurement))}${onSection.length ? ` · ${onSection.join(' and ')} on section fill` : ''}` : '';
+    ? [`${t('Mesh distance')} · ${mm(meshDistance(measurement))}`, onSection.length && t('{points} on section fill', { points: onSection.join(' & ') })].filter(Boolean).join(' · ') : '';
   const label = commentContext(target, measurement, partName, rulerStart);
   $('target').textContent = label;
   $('target').title = label;
@@ -422,18 +427,18 @@ function renderParts(reveal = false, { save = true, revealGroup, revealInTree = 
   const { changes, removed, since } = changesFromPrevious(parts);
   const showChanges = $('show-changed-parts');
   showChanges.hidden = !changes.size;
-  showChanges.textContent = beforeChangedView ? 'Restore previous view' : 'Isolate changed parts';
-  showChanges.title = beforeChangedView ? 'Restore the camera, section and part visibility' : `Show ${changes.size} changed parts since v${since}`;
+  showChanges.textContent = beforeChangedView ? t('Restore previous view') : t('Isolate changed parts');
+  showChanges.title = beforeChangedView ? t('Restore the camera, section and part visibility') : t('Show {count} changed parts since v{version}', { count: changes.size, version: since });
   showChanges.setAttribute('aria-expanded', String(Boolean(beforeChangedView)));
   addIcon(showChanges, beforeChangedView ? 'undo' : 'isolate');
   $('changed-parts').hidden = !beforeChangedView;
   $('parts-removed').hidden = !removed;
-  $('parts-removed').textContent = removed ? `${removed} removed since v${since}` : '';
+  $('parts-removed').textContent = removed ? t('{count} removed since v{version}', { count: removed, version: since }) : '';
   $('undo-parts').disabled = !partUndo.length;
   $('redo-parts').disabled = !partRedo.length;
   const isolate = parts.some(part => part.id === selected);
   const hideParts = $('hide-parts');
-  hideParts.textContent = isolate ? 'Isolate selection' : 'Hide all';
+  hideParts.textContent = isolate ? t('Isolate selection') : t('Hide all');
   hideParts.classList.toggle('isolate-action', isolate);
   addIcon(hideParts, isolate ? 'isolate' : 'eyeOff');
   hideParts.disabled = parts.every(({ id }) => viewer.hidden.has(id) === (id !== selected));
@@ -624,7 +629,7 @@ function renderFeedback() {
   $('version-note').hidden = !version.note;
   const latest = review.versions.at(-1).number;
   const working = review.batches.some(batch => batch.workingOn === latest + 1);
-  const agentStatus = working ? `Agent started work on v${latest + 1}` : review.agentListening ? 'Agent listening' : batches[0]?.deliveredAt ? 'Agent received feedback' : '';
+  const agentStatus = working ? t('Agent started work on v{version}', { version: latest + 1 }) : review.agentListening ? t('Agent listening') : batches[0]?.deliveredAt ? t('Agent received feedback') : '';
   $('agent-status').textContent = agentStatus;
   $('agent-status').hidden = !agentStatus;
   const editor = document.activeElement?.classList.contains('comment-edit') ? document.activeElement : undefined;
@@ -633,7 +638,7 @@ function renderFeedback() {
     label: commentContext(comment.target, comment.measurement, partName), outcome: outcomes.get(comment.id), selected: selectedComment === comment.id,
     editor: inlineEdit?.id === comment.id ? inlineEdit : undefined, button,
     onSelect: () => {
-      if (editingDraft() || commentBusy) throw new Error('Add or clear the current comment before opening a different annotation.');
+      if (editingDraft() || commentBusy) throw new Error(t('Add or clear the current comment before opening a different annotation.'));
       selectComment(comment.id);
       showComment(comment);
     },
@@ -648,7 +653,7 @@ function renderFeedback() {
   })) : drafts.map(renderCard);
   $('comments').replaceChildren(...rows);
   $('empty-comments').hidden = rows.length > 0;
-  $('empty-comments').textContent = amendment() ? 'This review has no comments.' : 'Add a comment to start the review.';
+  $('empty-comments').textContent = amendment() ? t('This review has no comments.') : t('Add a comment to start the review.');
   $('review-stream').scrollTop = scroll;
   const restoredEditor = editor && $('comments').querySelector('.comment-edit');
   if (restoredEditor) {
@@ -661,7 +666,7 @@ function renderFeedback() {
 function draftElement(id, control) { return $('comments').querySelector(`[data-comment-id="${id}"] ${control}`); }
 
 function startInlineEdit(comment) {
-  if (inlineEdit || commentBusy) throw new Error('Finish editing the current comment.');
+  if (inlineEdit || commentBusy) throw new Error(t('Finish editing the current comment.'));
   inlineEdit = { id: comment.id, text: comment.text };
   renderFeedback();
   draftElement(comment.id, 'textarea')?.focus();
@@ -704,12 +709,13 @@ async function reopenRound(batch, additional = false) {
 function confirmCorrection(version, latest, withdrawing) {
   const dialog = $('confirm-correction');
   const newer = latest > version;
+  const action = withdrawing ? 'withdrawal' : 'correction';
   $('correction-hint').textContent = newer
-    ? `v${latest} is available. This ${withdrawing ? 'withdrawal' : 'correction'} updates the feedback for v${version}. You can keep the draft and review v${latest} first.`
-    : `The agent already received the original feedback. It may have started work before this ${withdrawing ? 'withdrawal' : 'correction'}.`;
+    ? t('v{latest} is available. This {action} updates the feedback for v{version}. You can keep the draft and review v{latest} first.', { latest, action, version })
+    : t('The agent already received the original feedback. It may have started work before this {action}.', { action });
   $('review-newer').hidden = !newer;
-  $('review-newer').textContent = `Review v${latest}`;
-  $('send-correction').textContent = `${withdrawing ? 'Withdraw feedback on' : 'Send correction for'} v${version}`;
+  $('review-newer').textContent = t('Review v{version}', { version: latest });
+  $('send-correction').textContent = t(withdrawing ? 'Withdraw feedback on v{version}' : 'Send correction for v{version}', { version });
   dialog.returnValue = 'cancel';
   dialog.showModal();
   return new Promise(resolve => dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true }));
@@ -718,7 +724,7 @@ function confirmCorrection(version, latest, withdrawing) {
 async function copyRound(batch) {
   const [feedback] = await api(`${endpoint}/feedback?batch=${batch.id}`);
   await navigator.clipboard.writeText(feedback.markdown);
-  status('Review copied');
+  status(t('Review copied'));
 }
 
 function showComment(comment) {
@@ -776,7 +782,7 @@ async function openVersion(number) {
 function versionOptions() {
   const latest = review.versions.at(-1).number;
   const versions = [...review.versions].reverse();
-  $('versions').replaceChildren(...versions.map(version => option(version.number, version.number === latest ? ' · latest' : '')));
+  $('versions').replaceChildren(...versions.map(version => option(version.number, version.number === latest ? ` · ${t('latest')}` : '')));
   $('versions').value = String(active);
   $('compare-version').replaceChildren(...versions.filter(version => version.number !== active).map(version => option(version.number)));
   if (comparedVersion) $('compare-version').value = String(comparedVersion);
@@ -799,7 +805,7 @@ async function loadReview() {
   else {
     versionOptions();
     renderFeedback();
-    if (followLatest && latest !== active && !amendment() && editingDraft()) status(`v${latest} is available. Your draft is still on v${active}.`);
+    if (followLatest && latest !== active && !amendment() && editingDraft()) status(t('v{latest} is available. Your draft stays on v{active}.', { latest, active }));
   }
 }
 
@@ -821,7 +827,7 @@ async function showProjects() {
 function openUpload() {
   const form = $('upload-form');
   form.reset();
-  $('upload-heading').textContent = projectId ? 'Publish a version' : 'New project';
+  $('upload-heading').textContent = projectId ? t('Publish a version') : t('New project');
   $('note-label').hidden = !projectId;
   form.elements.title.value = review?.title ?? '';
   form.elements.title.readOnly = Boolean(projectId);
@@ -839,11 +845,11 @@ $('upload-form').addEventListener('submit', async event => {
   try {
     const fields = new FormData(form);
     const files = fields.getAll('files');
-    if (!files.length || files.length > 250) throw new Error('Select 1 to 250 files.');
+    if (!files.length || files.length > 250) throw new Error(t('Select 1 to 250 files.'));
     const parts = [];
     for (const file of files) {
       const format = file.name.split('.').at(-1).toLowerCase();
-      if (!['stl', '3mf', 'glb'].includes(format)) throw new Error(`Unsupported format: ${file.name}`);
+      if (!['stl', '3mf', 'glb'].includes(format)) throw new Error(t('Unsupported format: {name}', { name: file.name }));
       const id = file.name.replace(/\.[^.]+$/, '').normalize('NFD').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^[^a-zA-Z0-9]+/, '').slice(0, 83) || 'pieza';
       const safeId = parts.some(part => part.id === id) ? `${id}-${parts.length + 1}` : id;
       const uploaded = await api('/api/assets', file, 'POST');
@@ -860,9 +866,22 @@ $('upload-form').addEventListener('submit', async event => {
   finally { submit.disabled = false; }
 });
 
+function updateLanguage() {
+  if (!active) return;
+  versionOptions();
+  renderParts(false, { save: false });
+  renderFeedback();
+  syncToolHint();
+  syncSectionControls();
+  displayMeasurement();
+  $('dimensions').textContent = viewer.size().map(mm).join(' × ');
+  viewer.render();
+}
+
 async function boot() {
+  translatePage();
   document.querySelectorAll('[data-icon]').forEach(element => addIcon(element, element.dataset.icon));
-  setupHelp(api);
+  setupHelp(api, updateLanguage);
   $('upload').hidden = false;
   if (!projectId) return showProjects();
   $('review').hidden = false;
@@ -871,8 +890,8 @@ async function boot() {
   $('version-label').hidden = false;
   viewer = new Viewport($('viewport'), {
     onPick, onResize: updateMarker,
-    onRegion: region => markSurface(region, 'Drag a box over a visible surface'),
-    onPaint: paint => markSurface(paint, 'Drag the brush over a visible surface'),
+    onRegion: region => markSurface(region, t('Drag a box over a visible surface')),
+    onPaint: paint => markSurface(paint, t('Drag the brush over a visible surface')),
     canErase,
     onErase: marks => { if (canErase()) changeMarks(marks); },
     onCamera: view => { comparison?.restore(view, true); syncViewPreset(); updateMarker(); }
@@ -888,7 +907,7 @@ async function boot() {
   $('versions').addEventListener('change', safe(async event => {
     if (editingDraft() || commentBusy) {
       event.target.value = String(active);
-      throw new Error('Add the current comment before switching versions.');
+      throw new Error(t('Add the current comment before switching versions.'));
     }
     const number = Number(event.target.value);
     followLatest = number === review.versions.at(-1).number;
@@ -991,7 +1010,7 @@ async function boot() {
     if (!batch) return;
     const reference = JSON.stringify({ projectId, batchId: batch.id });
     await navigator.clipboard.writeText(`Please review my StlJam feedback on v${batch.version}. Use get_feedback with ${reference}.`);
-    status('Message copied');
+    status(t('Message copied'));
   }));
   const events = new EventSource(`${endpoint}/events`);
   const refresh = safe(loadReview);

@@ -1,23 +1,24 @@
-export const dimensionLabel = value => `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value)} mm`;
+import { t, formatNumber } from './i18n.mjs';
+export const dimensionLabel = value => `${formatNumber(value)} mm`;
 export const meshDistance = ({ a, b }) => Math.hypot(...a.map((value, index) => value - b[index]));
 
 export function commentContext(target, measurement, partName, start) {
-  const namedPoint = (key, hit) => `${key}: ${partName(hit.partId)}${hit.surface === 'section' ? ' (section fill)' : ''}`;
+  const namedPoint = (key, hit) => `${key}: ${partName(hit.partId)}${hit.surface === 'section' ? ` (${t('section fill')})` : ''}`;
   const items = [];
-  if (start) items.push(`Measure · Select point B · ${namedPoint('A', start)}`);
+  if (start) items.push(`${t('Measure')} · ${t('Select point B')} · ${namedPoint('A', start)}`);
   if (measurement) {
     const { endpoints } = measurement;
-    items.push([`Measure · ${dimensionLabel(meshDistance(measurement))}`, endpoints && `${namedPoint('A', endpoints.a)} → ${namedPoint('B', endpoints.b)}`].filter(Boolean).join(' · '));
+    items.push([`${t('Measure')} · ${dimensionLabel(meshDistance(measurement))}`, endpoints && `${namedPoint('A', endpoints.a)} → ${namedPoint('B', endpoints.b)}`].filter(Boolean).join(' · '));
   }
   if (target.kind === 'group') {
     const ids = new Set(target.marks.flatMap(mark => mark.parts ? mark.parts.map(part => part.partId) : [mark.partId]));
-    items.push(`${target.marks.length} marks · ${[...ids].map(partName).join(', ')}`);
+    items.push(`${t('{count} marks', { count: target.marks.length })} · ${[...ids].map(partName).join(', ')}`);
   } else if (target.parts) {
-    items.push(`${target.kind === 'paint' ? 'Painted surface' : 'Region'} · ${target.parts.map(({ partId }) => partName(partId)).join(', ')}`);
+    items.push(`${target.kind === 'paint' ? t('Painted surface') : t('Region')} · ${target.parts.map(({ partId }) => partName(partId)).join(', ')}`);
   } else if (target.kind === 'point') {
-    items.push(`${target.surface === 'section' ? 'Point on section' : 'Point'} · ${partName(target.partId)}`);
+    items.push(`${target.surface === 'section' ? t('Point on section') : t('Point')} · ${partName(target.partId)}`);
   }
-  return items.length ? items.join(' · ') : target.partId ? partName(target.partId) : 'Entire assembly';
+  return items.length ? items.join(' · ') : target.partId ? partName(target.partId) : t('Entire assembly');
 }
 
 export function drawMark(ctx, { point, region, regionBack, labelAt, label }) {
@@ -79,9 +80,9 @@ export function drawMarkup(ctx, { ruler, region, regionBack, drag }) {
       ctx.textAlign = 'center';
       ctx.strokeStyle = '#101a23';
       ctx.lineWidth = 3;
-      ctx.strokeText('Reverse side of region', x, y);
+      ctx.strokeText(t('Reverse side of region'), x, y);
       ctx.fillStyle = '#e6faf4';
-      ctx.fillText('Reverse side of region', x, y);
+      ctx.fillText(t('Reverse side of region'), x, y);
       ctx.restore();
     }
   }

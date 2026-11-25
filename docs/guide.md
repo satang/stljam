@@ -4,6 +4,8 @@ StlJam helps you review a mechanical part or assembly with an AI coding agent. Y
 
 Open **Help** in the header for a quick guide and the installed StlJam version. To report a problem with StlJam or suggest an improvement, use the links under **Feedback about StlJam**. They open editable drafts in GitHub Issues. **Copy system info** copies the app version, Node.js version, operating system and browser so you can include them in a report.
 
+Use **Help → Language** to change the interface language. On your first visit, StlJam uses the first supported language in your browser preferences, or English. The choice is saved in your browser. Project names, model labels and review comments keep their original wording.
+
 ## Try a first review
 
 Start StlJam and load the example gearbox using the [quick start](../README.md#quick-start). The demo includes both versions, so you can try a complete review before connecting an agent.

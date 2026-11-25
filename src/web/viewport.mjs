@@ -1,3 +1,4 @@
+import { t } from './i18n.mjs';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { disposePart, loadPart } from './model.mjs';
@@ -168,7 +169,7 @@ export class Viewport {
       this.bounds.union(bounds);
       return [{ id: part.userData.partId, min: bounds.min.toArray(), max: bounds.max.toArray() }];
     });
-    if (this.bounds.isEmpty() || !this.bounds.min.toArray().every(Number.isFinite) || !this.bounds.max.toArray().every(Number.isFinite)) throw new Error('The model has no valid visible geometry.');
+    if (this.bounds.isEmpty() || !this.bounds.min.toArray().every(Number.isFinite) || !this.bounds.max.toArray().every(Number.isFinite)) throw new Error(t('The model has no valid visible geometry.'));
     this.partColors = assignPartColors(boxes, this.bounds.getSize(new THREE.Vector3()).length(), preferredColors);
     for (const part of ready) {
       const color = this.partColors.get(part.userData.partId);
